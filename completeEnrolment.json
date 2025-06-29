@@ -1,0 +1,251 @@
+{
+ "title": "completeEnrolment Script v0.0a (###.completeEnrolment)",
+ "description": "Preference settings for the completeEnrolment script. Please set the Application Domain to match the what is set in for Script Variable #4 and add .completeEnrolment on the end.",
+ "options": {
+  "remove_empty_properties": true
+ },
+ "properties": {
+  "managementID": {
+   "title": "Jamf Pro Management ID",
+   "description": "This is required when using the Jamf Pro API to access the Management username and password. Script Variables #6 & #7 should contain the API Client ID & Secret respectively.",
+   "type": "string",
+   "enum": [
+    "$MANAGEMENTID"
+   ],
+   "default": "$MANAGEMENTID"
+  },
+  "jssID": {
+   "title": "Jamf Pro Computer ID",
+   "description": "This is required when sending emails so the link to the computer record is correct.",
+   "type": "string",
+   "enum": [
+    "$JSSID"
+   ],
+   "default": "$JSSID"
+  },
+  "tempAdmin": {
+   "title": "Temporary or Setup Administrator username",
+   "description": "The username for the Administrator account used to automatically login after restart and perform the rest of the install (using something like DEPNotify or Setup My Mac). This account should be removed automatically at a later time, after the rest of the install has removed the automatic login setting. Defaults to setup_admin.",
+   "type": "string",
+   "options": {
+    "inputAttributes": {
+     "placeholder": "setup_admin"
+    }
+   }
+  },
+  "tempName": {
+   "title": "Temporary or Setup Administrator real name",
+   "description": "The real name for the Administrator account above. Defaults to Setup Admin.",
+   "type": "string",
+   "options": {
+    "inputAttributes": {
+     "placeholder": "Setup Admin"
+    }
+   }
+  },
+  "tempKeep": {
+   "title": "Do we want keep or remove the Setup Administrator?",
+   "description": "The script will be default deleted the Temporary or Setup Administrator, enabling this will stop the account removal. Default is delete.",
+   "type": "boolean"
+  },
+  "lapsAdmin": {
+   "title": "Default IT Administrator username",
+   "description": "The username for the Default IT Administrator account, whose password is managed by macOSLAPS. This account does not get removed. Default to laps_admin.",
+   "type": "string",
+   "options": {
+    "inputAttributes": {
+     "placeholder": "laps_admin"
+    }
+   }
+  },
+  "lapsName": {
+   "title": "Default IT Administrator real name",
+   "description": "The real name for the Default IT Administrator account above. Defaults to LAPS Admin.",
+   "type": "string",
+   "options": {
+    "inputAttributes": {
+     "placeholder": "LAPS Admin"
+    }
+   }
+  },
+  "adminPicture": {
+   "title": "User Picture for the Administator accounts",
+   "description": "Path to an image file that can be used as the default user image for the admin accounts.",
+   "type": "string",
+   "options": {
+    "inputAttributes": {
+     "placeholder": "/path/to/icon"
+    }
+   }
+  },
+  "dialogIcon": {
+   "title": "Icon or image file for swiftDialog",
+   "description": "The icon or image file for swiftDialog to use when an admin login is required for a manual (re-)enrollment. Defaults to the caution icon.",
+   "type": "string",
+   "options": {
+    "inputAttributes": {
+     "placeholder": "/path/to/icon"
+    }
+   }
+  },
+  "corpName": {
+   "title": "Corporate Name",
+   "description": "Name or contact reference when sending warnings about network type being used. Defaults to 'The Service Desk'.",
+   "type": "string",
+   "options": {
+    "inputAttributes": {
+     "placeholder": "The Service Desk"
+    }
+   }
+  },
+  "serviceName": {
+   "title": "Enrollment Support Contact",
+   "description": "Name or contact reference when emailing about failures. Defaults to 'Service Management'.",
+   "type": "string",
+   "options": {
+    "inputAttributes": {
+     "placeholder": "Service Management"
+    }
+   }
+  },
+  "systemTimeZone": {
+   "title": "System Time Zone",
+   "description": "Set the Time Zone the computer should be operating in (helps with log timestamps), use systemsetup -listtimezones to view available options. Default is the Apple default, which is usually US Pacific Time (America/Los_Angeles(?)).",
+   "type": "string"
+  },
+  "systemTimeServer": {
+   "title": "System Time Server",
+   "description": "Set the the network time server the computer uses to syncronise the time. Defaults to the Apple default of time.apple.com.",
+   "type": "string"
+  },
+  "policyInstallomator": {
+   "title": "Jamf policy for installing Installomator",
+   "description": "Jamf policy name used to install Installomator, Installomator us used by enrollmentComplete to help with installing other tools like mkuser and swiftDialog. Installomator has a script available for Jamf to manage the install of Installomator. Defaults to installInstallomator.",
+   "type": "string"
+  },
+  "policyInitialFiles": {
+   "title": "Jamf policy for installing initial files",
+   "description": "Jamf policy name used to install initial files such as the images used by swiftDialog and the admin accounts above. Defaults to installInitialFiles.",
+   "type": "string"
+  },
+  "policyADUnbind": {
+   "title": "Jamf policy for unbinding from Active Directory",
+   "description": "Jamf policy name used to unbind the computer from Active Directory. Defaults to adUnbind.",
+   "type": "string"
+  },
+  "policyComputerName": {
+   "title": "Jamf policy for Managing the Computer Name",
+   "description": "Jamf policy name used to manage the computer name, that is to preset the computer name before binding to Active Directory. Defaults to fixComputerName.",
+   "type": "string"
+  },
+  "policyADBind": {
+   "title": "Jamf policy for binding to Active Directory",
+   "description": "Jamf policy name used to bind the computer to Active Directory. Defaults to adBind.",
+   "type": "string"
+  },
+  "manualContinue": {
+   "title": "Start the next stage for a manual enrollment",
+   "description": "When performing a manual enrollment, shall we automatically continue (like a PreStage enrollment, without a restart), ask to continue, or just skip it. Default is ask.",
+   "type": "string",
+   "enum": [
+    "always",
+    "ask",
+    "skip"
+   ],
+   "default": "ask"
+  },
+  "continueTimer": {
+   "title": "Second count for how long to wait for a response",
+   "description": "When performing a manual enrollment, if we ask to continue, how long should we wait for a response. Default is 0 (no timeout).",
+   "type": "integer"
+  },
+  "finalTextOne": {
+   "title": "The first line of the login window text to finish with",
+   "description": "The script updates the login window text periodically, this will be the first line of what the script finishes with to show it has finished.",
+   "type": "string",
+   "options": {
+    "inputAttributes": {
+     "placeholder": "This computer is managed by Jamf Pro."
+    }
+   }
+  },
+  "finalTextTwo": {
+   "title": "The second line of the login window text to finish with",
+   "description": "The script updates the login window text periodically, this will be the second line of what the script finishes with to show it has finished.",
+   "type": "string",
+   "options": {
+    "inputAttributes": {
+     "placeholder": "Please contact the Service Desk for all support queries."
+    }
+   }
+  },
+  "emailFrom": {
+   "title": "Email address to send emails From",
+   "description": "The script can send emails on completion or errors, to do this it requires a minimum of this From address, and at least one of the To address types below. This is the From address. Default is not to send an email.",
+   "type": "string"
+  },
+  "emailTo": {
+   "title": "Email address to send emails To",
+   "description": "The script can send emails on completion or errors, to do this it requires a minimum of this or one of the other To address types, and the From address above. This is for the address to send all emails to. Default is not to send an email.",
+   "type": "string"
+  },
+  "emailErrors": {
+   "title": "Email address to copy errors To",
+   "description": "The script can send emails on completion or errors, to do this it requires a minimum of this or one of the other To address types, and the From address above. This is for the address to send errors to. Default is not to send an email.",
+   "type": "string"
+  },
+  "emailBCC": {
+   "title": "Email address to privately send emails To",
+   "description": "The script can send emails on completion or errors, to do this it requires a minimum of this or one of the other To address types, and the From address above. This is for the address to send all emails to without showing the To address. Default is not to send an email.",
+   "type": "string"
+  },
+  "emailBCCFiller": {
+   "title": "Email address for display only",
+   "description": "The script can send emails on completion or errors, to do this it requires a minimum of one of the To address types above, and the From address above. This address is for display as the To address when sending to a BCC address. Defaults to From address.",
+   "type": "string"
+  },
+  "emailSMTP": {
+   "title": "Server address & port to send authenticated emails from",
+   "description": "The script can send emails on completion or errors, including the ability to send them via an authenticated SMTP server. This is for the address & port to send emails from. Default is not to send authenticated email.",
+   "type": "string",
+   "options": {
+    "inputAttributes": {
+     "placeholder": "server.name:25"
+    }
+   }
+  },
+  "emailAUTH": {
+   "title": "Email login address to send authenticated emails from",
+   "description": "The script can send emails on completion or errors, including the ability to send them via an authenticated SMTP server. This is for the authentication email address to send the emails from. Defaults to From address.",
+   "type": "string"
+  },
+  "appLIST": {
+   "title": "Full path to a txt file whose contents should have been built by OnBoarded-Checklist",
+   "description": "The script can send emails on completion or errors. This allows a list of installed applications to be included, or the log file. For the log file enter log here. Defaults to not including a file.",
+   "type": "string"
+  },
+  "perAPP": {
+   "title": "Time out for Installation Status dialog",
+   "description": "When using monitoring the installation status of applications, obviously the dialog should not wait forever, therefore the script will calculate a timeout based on this number of minutes per application to monitor. i.e 5 minutes per app for 5 apps will mean the Installation Status dialog will timeout after 25 minutes. This will also set the wait time the dialog will wait for someone to click done (after all apps are installed). Requires the application list to be included. Default is 5 Minutes.",
+   "type": "integer",
+   "enum": [
+    2,
+    5,
+    10,
+    15,
+    20
+   ],
+   "default": 5
+  },
+  "emailSuccess": {
+   "title": "Do we want success emails, or errors only",
+   "description": "The script can send emails on completion or errors, if true, the successful completion email will be sent, false, it won't. Default is don't send.",
+   "type": "boolean"
+  },
+  "emailJamfLog": {
+   "title": "Force Jamf to email log on success",
+   "description": "Jamf has it's own ability to email policy errors (including those generated by scripts). Enabling this would force the script completion to error out anyway, causing Jamf Pro/Cloud to email the policy error and script log. Default is don't send.",
+   "type": "boolean"
+  }
+ }
+}
