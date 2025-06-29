@@ -13,6 +13,16 @@ else
  WHO_LOGGED="$( who | grep -m1 console | cut -d " " -f 1 )"
 fi
 
+if [ "$1" = "/" ]; then
+ # Load config profile settings and save them for later use in a more secure location, do the same
+ # for supplied options such as password, only attempt to store them in the Keychain (such as email,
+ # and API passwords). This is to allow for hopefully a more secure process, but limiting the access
+ # to some of the information to say only during the first 24 hours (at least coming from Jamf Pro
+ # that way).
+else
+ # load saved settings
+fi
+
 case $1 in
  /)
   # Executed by Jamf Pro
@@ -23,8 +33,8 @@ case $1 in
     # Secure Token, without which so many things will break.
    ;;
    *)
-    # We will need the logins of an account with a Secure Token to proceed, so lets ask
-    # In this instance, no need to restart, once the login details are collected, just start processing.
+    # We will need the logins of an account with a Secure Token to proceed, so lets ask, in this
+    # instance, no need to restart, once the login details are collected, just start processing.
    ;;
   esac
  ;;
