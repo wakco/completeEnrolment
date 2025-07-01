@@ -13,19 +13,22 @@ else
  WHO_LOGGED="$( who | grep -m1 console | cut -d " " -f 1 )"
 fi
 
-if [ "$1" = "/" ]; then
- # Load config profile settings and save them for later use in a more secure location, do the same
- # for supplied options such as password, only attempt to store them in the Keychain (such as email,
- # and API passwords). This is to allow for hopefully a more secure process, but limiting the access
- # to some of the information to say only during the first 24 hours (at least coming from Jamf Pro
- # that way).
-else
- # load saved settings
-fi
+# So we can use ^/ to match anything except /
+# If we have any problems later, we can consider using "*) unsetopt ... ;|" to help clear it after
+# the case item ^/)
+setopt extended_glob
 
 case $1 in
+ ^/)
+  # load saved settings
+ ;|
  /)
   # Executed by Jamf Pro
+  # Load config profile settings and save them for later use in a more secure location, do the same
+  # for supplied options such as passwords, only attempt to store them in the Keychain (such as
+  # email, and API passwords). This is to allow for hopefully a more secure process, but limiting
+  # the access to some of the information to say only during the first 24 hours (at least coming
+  # from Jamf Pro that way).
   case $WHO_LOGGED in
    _mbsetupuser)
     # Get setup quickly and start atLoginWindow for initial step tracking followed by a restart.
