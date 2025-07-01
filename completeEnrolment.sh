@@ -1,5 +1,16 @@
 #!/bin/zsh -f
 
+completeEnrolment="/usr/local/bin/completeEnrolment"
+mkdir -p $( dirname $completeEnrolment )
+head -n1 "$0" > "$completeEnrolment"
+chmod -R 755 $( dirname $completeEnrolment )
+chown -R root:wheel $( dirname $completeEnrolment )
+tail -n $(($( wc -l "$0" | awk '{ print $1 }' )-$( grep -n -m1 "^exit 0" "$0" | cut -d ':' -f 1 ))) "$0" >> "$completeEnrolment"
+
+exit 0
+#
+#
+
 # Whose logged in
 
 # The who command method is used as it is the only one that still returns _mbsetupuser as used by
@@ -13,15 +24,7 @@ else
  WHO_LOGGED="$( who | grep -m1 console | cut -d " " -f 1 )"
 fi
 
-# So we can use ^/ to match anything except /
-# If we have any problems later, we can consider using "*) unsetopt ... ;|" to help clear it after
-# the case item ^/)
-setopt extended_glob
-
 case $1 in
- ^/)
-  # load saved settings
- ;|
  /)
   # Executed by Jamf Pro
   # Load config profile settings and save them for later use in a more secure location, do the same
@@ -41,6 +44,9 @@ case $1 in
    ;;
   esac
  ;;
+ *)
+  # load saved settings
+ ;|
  atLoginWindow)
   # triggered loginwindow
  ;; # or ;& ?
