@@ -17,6 +17,9 @@ LIB="/Library"
 DEFAULTS_FILE="$LIB/Managed Preferences/$DEFAULTS_PLIST"
 LOGIN_PLIST="$LIB/LaunchAgents/$DEFAULTS_PLIST"
 STARTUP_PLIST="$LIB/LaunchDaemons/$DEFAULTS_PLIST"
+CLEANUP_FILES=( "$C_ENROLMENT" )
+CLEANUP_FILES+=( "$LOGIN_PLIST" )
+CLEANUP_FILES+=( "$STARTUP_PLIST" )
 
 # Whose logged in
 
@@ -31,8 +34,6 @@ else
  WHO_LOGGED="$( who | grep -m1 console | cut -d " " -f 1 )"
 fi
 
-LOG_FILE="$LIB/Logs/$DEFAULTS_NAME-$( if [ "$1" = "/" ]; then echo "$WHO_LOGGED" ; else echo "$1" ; fi )-$( date "+%Y-%m-%d %H-%M-%S %Z" ).log"
-
 # Functions
 
 logIt() {
@@ -40,7 +41,19 @@ logIt() {
 }
 
 runIt() {
- eval "$@" 2>&1 | tee -a "$LOG_FILE"
+ local report="$3"
+ case $2 in
+  log)
+   logIt "Running $1"
+  ;;
+  track)
+   report="$1"
+  ;&
+  custom)
+   logIt "Running $report"
+  ;;
+ esac
+ eval "$1" 2>&1 | tee -a "$LOG_FILE"
 }
 
 defaultRead() {
@@ -48,13 +61,14 @@ defaultRead() {
 }
 
 myInstall() {
- until [ -e "$1" ]; do
+ local repeatattempts=5
+ until [ -e "$1" ] || [ $repeatattempts -eq 0 ]; do
   case $2 in
    policy)
-    runIt "/usr/local/bin/jamf policy -event $3"
+    runIt "$C_JAMF policy -event $3" track
    ;;
    install)
-    runIt "/usr/local/Installomator/Installomator.sh $3 NOTIFY=silent GITHUBAPI=$GITHUB_API"
+    runIt "$C_INSTALL $3 NOTIFY=silent GITHUBAPI=$GITHUB_API" custom "$C_INSTALL $3 NOTIFY=silent"
    ;;
    *)
     logIt "Error: myInstall: \$2 must be either policy or install, soft failing this install attempt by touching the check file"
@@ -63,25 +77,104 @@ myInstall() {
   esac
   if [ ! -e "$1" ]; then
    sleep 5
+   ((repeatattempts--))
   fi
  done
+ if [ ! -e "$1" ]; then
+  
+ fi
+}
+
+track() {
+ case $1 in
+  bool|integer|string)
+   if [ "$( jq -Mr ".$2 // empty" "$TRACKER_JSON" )" = "" ]; then
+    eval "plutil -insert $2 -$1 '$3' '$TRACKER_JSON'"
+   else
+    eval "plutil -replace $2 -$1 '$3' '$TRACKER_JSON'"
+   fi
+   if [ -e "$TRACKER_RUNNING" ]; then
+    echo "$2: $3" >> "$TRACKER_COMMAND"
+    sleep 0.1
+   fi
+  ;;
+  new)
+   eval "plutil -insert listitem -json '{\"title\":\"$2\"}' -append '$TRACKER_JSON'"
+   if [ -e "$TRACKER_RUNNING" ]; then
+    echo "listitem: add, title: $2" >> "$TRACKER_COMMAND"
+   fi
+   if [ "$TRACKER_ITEM" = "" ]; then
+    track integer currentitem 0
+    TRACKER_ITEM=0
+   else
+    ((TRACKER_ITEM++))
+    track integer currentitem $TRACKER_ITEM
+   fi
+  ;;
+  add)
+   eval "plutil -insert listitem.$TRACKER_ITEM.$2 -string '$3' -append '$TRACKER_JSON'"
+  ;|
+  update)
+   eval "plutil -replace listitem.$TRACKER_ITEM.$2 -string '$3' -append '$TRACKER_JSON'"
+  ;|
+  add|update)
+   if [ -e "$TRACKER_RUNNING" ]; then
+    echo "listitem: index: $TRACKER_ITEM, $2: $3" >> "$TRACKER_COMMAND"
+    sleep 0.1
+   fi
+  ;;
+ esac
 }
 
 # Lets get started
+
+LOG_FILE="$LIB/Logs/$DEFAULTS_NAME-$( if [ "$1" = "/" ]; then echo "$WHO_LOGGED" ; else echo "$1" ; fi )-$( date "+%Y-%m-%d %H-%M-%S %Z" ).log"
 
 until [ -e "$DEFAULTS_FILE" ]; do
  sleep 1
 done
 
+# Load common settings
+
+DIALOG_ICON="${"$( defaultRead dialogIcon )":-"caution"}"
+ADMIN_ICON="${"$( defaultRead adminPicture )":-"--no-picture"}"
+if [ "$ADMIN_ICON" != "--no-picture" ]; then
+ ADMIN_ICON="--picture $ADMIN_ICON"
+fi
+TRACKER_COMMAND="/tmp/completeEnrolment.DIALOG_COMMANDS.log"
+TRACKER_JSON="/private/var/root/completeEnrolment.json"
+TRACKER_RUNNING="/tmp/completeEnrolment.DIALOG.run"
+if [ -e "$TRACKER_JSON" ]; then
+ TRACKER_ITEM=$( jq -Mr '.currentitem' "$TRACKER_JSON" )
+fi
+touch "$TRACKER_COMMAND" "$TRACKER_JSON"
+CLEANUP_FILES+=( "$TRACKER_JSON" )
+
+# And start processing
+
 case $1 in
  /)
+  # Initialise dialog setup file, our "tracker"
+  # although plutil can create an empty json, it can't insert into it, incorrectly mistaking the
+  # file to be in another format (OpenStep), so well just add the first item with an echo
+  echo '{"title":"none"}' > "$TRACKER_JSON"
+  plutil -insert listitem -array "$TRACKER_JSON"
+  track string title "Welcome to ${"$( defaultRead corpName )":-"The Service Desk"}"
+  track string message "Please wait while this computer is set up..."
+  track string icon "$DIALOG_ICON"
+  track string lliststyle "compact"
+  track boot button1disabled true
+  track string button1text "none"
+  track string commandfile "$TRACKER_COMMAND"
+  track string position "bottom"
+  
+  
   # set time
-  SYSTEM_TIME_ZONE="${"$( defaultRead systemTimeZone )":-"$( systemsetup -gettimezone | awk '{print $NF}' )"}"
+  runIt "/usr/sbin/systemsetup -settimezone '"${"$( defaultRead systemTimeZone )":-"$( systemsetup -gettimezone | awk '{print $NF}' )"}"'"
   #"# this comment fixes an Xcode display bug
+  sleep 5
   SYSTEM_TIME_SERVER="${"$( defaultRead systemTimeServer )":-"$( systemsetup -getnetworktimeserver | awk '{print $NF}' )"}"
   #"# this comment fixes an Xcode display bug
-  runIt "/usr/sbin/systemsetup -settimezone '"$SYSTEM_TIME_ZONE"'"
-  sleep 5
   runIt "/usr/sbin/systemsetup -setnetworktimeserver $SYSTEM_TIME_SERVER"
   sleep 5
   runIt "/usr/bin/sntp -Ss $SYSTEM_TIME_SERVER"
@@ -91,23 +184,20 @@ case $1 in
   logIt "Installing $C_ENROLMENT..."
   ditto "$0" "$C_ENROLMENT"
   
-  # Install Rosetta (just in case, and account for it being missing in macOS 28+)
+  # Install Rosetta (just in case, and skip it for macOS 28+)
   if [ "$( arch )" = "arm64" ] && [ $(sw_vers -productVersion | cut -d '.' -f 1) -lt 28 ]; then
    logIt "Installing Rosetta on Apple Silicon..."
    runIt "/usr/sbin/softwareupdate --install-rosetta --agree-to-license"
   fi
   
+  # Install
+  runIt "$C_JAMF policy -event \"${"$( defaultRead policyInitialFiles )":-"installInitialFiles"}\""
   
-
-  # Setup Login Window
-  defaults write "$LOGIN_DIALOG_PLIST" LimitLoadToSessionType -array "LoginWindow"
-  defaults write "$LOGIN_DIALOG_PLIST" Label "$DEFAULTS_NAME.loginwindow"
-  defaults write "$LOGIN_DIALOG_PLIST" RunAtLoad -bool TRUE
-  defaults write "$LOGIN_DIALOG_PLIST" ProgramArguments -array "$C_ENROLMENT" "loginWindow"
-  chmod ugo+r "$LOGIN_DIALOG_PLIST"
+  # Install
+  myInstall "/usr/local/Installomator/Installomator.sh" policy "${"$( defaultRead policyInstallomator )":-"installInstallomator"}"
   
-  
-  launchctl load -S LoginWindow "$LAUNCHAGENT"
+  # Install
+  myInstall "/usr/local/bin/dialog" install dialog
   
   # Executed by Jamf Pro
   # Load config profile settings and save them for later use in a more secure location, do the same
@@ -120,18 +210,42 @@ case $1 in
     # Get setup quickly and start atLoginWindow for initial step tracking followed by a restart.
     # This includes creating a temporary admin account with automatic login status to get the first
     # Secure Token, without which so many things will break.
+    
+    # Setup Login Window
+    defaults write "$LOGIN_PLIST" LimitLoadToSessionType -array "LoginWindow"
+    defaults write "$LOGIN_PLIST" Label "$DEFAULTS_NAME.loginwindow"
+    defaults write "$LOGIN_PLIST" RunAtLoad -bool TRUE
+    defaults write "$LOGIN_PLIST" ProgramArguments -array "$C_ENROLMENT" "startTrackerDialog" "-restart"
+    chmod ugo+r "$LOGIN_PLIST"
+    
+    # Make sure loginwindow is running
+    while [ "$( pgrep -lu "root" "loginwindow" )" = "" ]; do
+     sleep 1
+    done
+
+    # Start Dialog
+    launchctl load -S LoginWindow "$LOGIN_PLIST"
    ;;
    *)
-    # We will need the logins of an account with a Secure Token to proceed, so lets ask, in this
-    # instance, no need to restart, once the login details are collected, just start processing.
+    # We will need the login details of a Volume Owner (an account with a Secure Token) to proceed,
+    # so we'll ask for them, and in this instance, no need to restart, once the login details are
+    # collected, just start processing.
    ;;
   esac
  ;;
  *)
   # load saved settings
  ;|
- loginWindow)
-  # triggered loginwindow
+ startTrackerDialog)
+  # to open the event tracking dialog
+  touch "$TRACKER_RUNNING"
+  "$C_DIALOG" --loginwindow --jsonfile "$TRACKER_JSON"
+  rm -f "$TRACKER_RUNNING"
+  if [ "$2" = "-restart" ]; then
+   defaults write "$LOGIN_PLIST" LimitLoadToSessionType
+   defaults write "$LOGIN_PLIST" ProgramArguments -array "$C_ENROLMENT" "startTrackerDialog"
+   shutdown -r now
+  fi
  ;; # or ;& ?
  startProcessing)
  ;; # or ;& ?

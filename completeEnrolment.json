@@ -80,7 +80,7 @@
   },
   "dialogIcon": {
    "title": "Icon or image file for swiftDialog",
-   "description": "The icon or image file for swiftDialog to use when an admin login is required for a manual (re-)enrollment. Defaults to the caution icon.",
+   "description": "The icon or image file for swiftDialog to use when displaying any dialog. Defaults to the caution icon.",
    "type": "string",
    "options": {
     "inputAttributes": {
