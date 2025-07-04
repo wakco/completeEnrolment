@@ -11,6 +11,9 @@
       location = "group:completeEnrolment.json">
    </FileRef>
    <FileRef
+      location = "group:taskList.json">
+   </FileRef>
+   <FileRef
       location = "group:README.md">
    </FileRef>
 </Workspace>

@@ -1,0 +1,10 @@
+{
+ "title": "completeEnrolment Script v0.0a (completeEnrolment)",
+ "description": "Task list for the completeEnrolment script. Please set the Application Domain to completeEnrolment. This is to be a seperate config profile to allow Jamf to dynamically change tasks lists before the script gets to processing it, and to avoid replicating all the other settings across each task list",
+ "options": {
+  "remove_empty_properties": true
+ },
+ "properties": {
+  
+ }
+}
