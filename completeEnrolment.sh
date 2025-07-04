@@ -12,14 +12,17 @@ C_ENROLMENT="/usr/local/bin/completeEnrolment"
 # Variables
 
 DEFAULTS_NAME="completeEnrolment"
+# If you change DEFAULTS_NAME, make sure the domain in the config profiles matches, or it won't work
 DEFAULTS_PLIST="$DEFAULTS_NAME.plist"
 LIB="/Library"
 DEFAULTS_FILE="$LIB/Managed Preferences/$DEFAULTS_PLIST"
 LOGIN_PLIST="$LIB/LaunchAgents/$DEFAULTS_PLIST"
 STARTUP_PLIST="$LIB/LaunchDaemons/$DEFAULTS_PLIST"
+SETTINGS_PLIST="$LIB/Preferences/$DEFAULTS_PLIST"
 CLEANUP_FILES=( "$C_ENROLMENT" )
 CLEANUP_FILES+=( "$LOGIN_PLIST" )
 CLEANUP_FILES+=( "$STARTUP_PLIST" )
+CLEANUP_FILES+=( "$DEFAULTS_PLIST" )
 
 # Whose logged in
 
@@ -33,6 +36,12 @@ if [ "$( who | grep console | wc -l )" -gt 1 ]; then
 else
  WHO_LOGGED="$( who | grep -m1 console | cut -d " " -f 1 )"
 fi
+
+# Log File
+
+# This will Generate a number of log files based on the task and when they started.
+
+LOG_FILE="$LIB/Logs/$DEFAULTS_NAME-$( if [ "$1" = "/" ]; then echo "Jamf-$WHO_LOGGED" ; else echo "Command-$1" ; fi )-$( date "+%Y-%m-%d %H-%M-%S %Z" ).log"
 
 # Functions
 
@@ -128,8 +137,6 @@ track() {
 
 # Lets get started
 
-LOG_FILE="$LIB/Logs/$DEFAULTS_NAME-$( if [ "$1" = "/" ]; then echo "$WHO_LOGGED" ; else echo "$1" ; fi )-$( date "+%Y-%m-%d %H-%M-%S %Z" ).log"
-
 until [ -e "$DEFAULTS_FILE" ]; do
  sleep 1
 done
@@ -154,6 +161,10 @@ CLEANUP_FILES+=( "$TRACKER_JSON" )
 
 case $1 in
  /)
+  # Install completeEnrolment
+  logIt "Installing $C_ENROLMENT..."
+  ditto "$0" "$C_ENROLMENT"
+
   # Initialise dialog setup file, our "tracker"
   # although plutil can create an empty json, it can't insert into it, incorrectly mistaking the
   # file to be in another format (OpenStep), so well just add the first item with an echo
@@ -179,10 +190,6 @@ case $1 in
   sleep 5
   runIt "/usr/bin/sntp -Ss $SYSTEM_TIME_SERVER"
   sleep 1
-
-  # Install completeEnrolment
-  logIt "Installing $C_ENROLMENT..."
-  ditto "$0" "$C_ENROLMENT"
   
   # Install Rosetta (just in case, and skip it for macOS 28+)
   if [ "$( arch )" = "arm64" ] && [ $(sw_vers -productVersion | cut -d '.' -f 1) -lt 28 ]; then
@@ -190,13 +197,15 @@ case $1 in
    runIt "/usr/sbin/softwareupdate --install-rosetta --agree-to-license"
   fi
   
-  # Install
+  # Install initial file
   runIt "$C_JAMF policy -event \"${"$( defaultRead policyInitialFiles )":-"installInitialFiles"}\""
   
-  # Install
+  # Install Installomator
+  # This can be either the custom version from this repository, or the script that installs the
+  # official version.
   myInstall "/usr/local/Installomator/Installomator.sh" policy "${"$( defaultRead policyInstallomator )":-"installInstallomator"}"
   
-  # Install
+  # Install swiftDialog
   myInstall "/usr/local/bin/dialog" install dialog
   
   # Executed by Jamf Pro
@@ -225,11 +234,22 @@ case $1 in
 
     # Start Dialog
     launchctl load -S LoginWindow "$LOGIN_PLIST"
+    # add completesetup as automatic login without volume owner details
    ;;
    *)
     # We will need the login details of a Volume Owner (an account with a Secure Token) to proceed,
-    # so we'll ask for them, and in this instance, no need to restart, once the login details are
-    # collected, just start processing.
+    # so we'll ask for it, and in this instance, no need to restart, once the login details are
+    # collected, start the dialog and just start processing (after setting the computer name).
+    # add completesetup with volume owner details, without automatic login
+   ;;
+  esac
+  # set computername
+  case $WHO_LOGGED in
+   _mbsetupuser)
+    # restart by sending quit message to dialog
+   ;;
+   *)
+    # trigger processing
    ;;
   esac
  ;;
@@ -247,12 +267,10 @@ case $1 in
    shutdown -r now
   fi
  ;; # or ;& ?
- startProcessing)
+ process)
+  # finishing setting up admin accounts
  ;; # or ;& ?
  continueProcessing)
- ;;
- atRestart)
-  # continued processing, possibly after restarting?
  ;;
  cleanUp)
   # A clean up routine
