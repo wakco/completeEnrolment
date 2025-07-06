@@ -173,7 +173,7 @@ case $1 in
   track string title "Welcome to ${"$( defaultRead corpName )":-"The Service Desk"}"
   track string message "Please wait while this computer is set up..."
   track string icon "$DIALOG_ICON"
-  track string lliststyle "compact"
+  track string liststyle "compact"
   track boot button1disabled true
   track string button1text "none"
   track string commandfile "$TRACKER_COMMAND"
@@ -207,7 +207,12 @@ case $1 in
   
   # Install swiftDialog
   myInstall "/usr/local/bin/dialog" install dialog
-  
+
+  # start setting up dialog plist
+  defaults write "$LOGIN_PLIST" Label "$DEFAULTS_NAME.loginwindow"
+  defaults write "$LOGIN_PLIST" RunAtLoad -bool TRUE
+  chmod ugo+r "$LOGIN_PLIST"
+
   # Executed by Jamf Pro
   # Load config profile settings and save them for later use in a more secure location, do the same
   # for supplied options such as passwords, only attempt to store them in the Keychain (such as
@@ -222,10 +227,7 @@ case $1 in
     
     # Setup Login Window
     defaults write "$LOGIN_PLIST" LimitLoadToSessionType -array "LoginWindow"
-    defaults write "$LOGIN_PLIST" Label "$DEFAULTS_NAME.loginwindow"
-    defaults write "$LOGIN_PLIST" RunAtLoad -bool TRUE
     defaults write "$LOGIN_PLIST" ProgramArguments -array "$C_ENROLMENT" "startTrackerDialog" "-restart"
-    chmod ugo+r "$LOGIN_PLIST"
     
     # Make sure loginwindow is running
     while [ "$( pgrep -lu "root" "loginwindow" )" = "" ]; do
@@ -244,7 +246,8 @@ case $1 in
     "$C_DIALOG"
     
     #
-    "$C_DIALOG" --jsonfile "$TRACKER_JSON" &
+    defaults write "$LOGIN_PLIST" ProgramArguments -array "$C_ENROLMENT" "startTrackerDialog"
+    launchctl load -S LoginWindow "$LOGIN_PLIST"
    ;;
   esac
   # set computername
@@ -254,6 +257,7 @@ case $1 in
     defaults write "$STARTUP_PLIST" Label "$DEFAULTS_NAME.startup"
     defaults write "$STARTUP_PLIST" RunAtLoad -bool TRUE
     defaults write "$STARTUP_PLIST" ProgramArguments -array "$C_ENROLMENT" "process"
+    chmod ugo+r "$STARTUP_PLIST"
    ;;
    *)
     # trigger processing
@@ -270,7 +274,7 @@ case $1 in
   "$C_DIALOG" --loginwindow --jsonfile "$TRACKER_JSON"
   rm -f "$TRACKER_RUNNING"
   if [ "$2" = "-restart" ]; then
-   defaults write "$LOGIN_PLIST" LimitLoadToSessionType
+   defaults delete "$LOGIN_PLIST" LimitLoadToSessionType
    defaults write "$LOGIN_PLIST" ProgramArguments -array "$C_ENROLMENT" "startTrackerDialog"
    shutdown -r now
   fi
