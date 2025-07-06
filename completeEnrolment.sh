@@ -240,16 +240,24 @@ case $1 in
     # We will need the login details of a Volume Owner (an account with a Secure Token) to proceed,
     # so we'll ask for it, and in this instance, no need to restart, once the login details are
     # collected, start the dialog and just start processing (after setting the computer name).
-    # add completesetup with volume owner details, without automatic login
+    # add completesetup with volume owner details, without automatic login.
+    "$C_DIALOG"
+    
+    #
+    "$C_DIALOG" --jsonfile "$TRACKER_JSON" &
    ;;
   esac
   # set computername
   case $WHO_LOGGED in
    _mbsetupuser)
     # restart by sending quit message to dialog
+    defaults write "$STARTUP_PLIST" Label "$DEFAULTS_NAME.startup"
+    defaults write "$STARTUP_PLIST" RunAtLoad -bool TRUE
+    defaults write "$STARTUP_PLIST" ProgramArguments -array "$C_ENROLMENT" "process"
    ;;
    *)
     # trigger processing
+    "$C_ENROLMENT" process
    ;;
   esac
  ;;
@@ -266,21 +274,18 @@ case $1 in
    defaults write "$LOGIN_PLIST" ProgramArguments -array "$C_ENROLMENT" "startTrackerDialog"
    shutdown -r now
   fi
- ;; # or ;& ?
+ ;;
  process)
   # finishing setting up admin accounts
- ;; # or ;& ?
- continueProcessing)
+  defaults write "$STARTUP_PLIST" ProgramArguments -array "$C_ENROLMENT" "cleanUp"
  ;;
  cleanUp)
   # A clean up routine
+  logIt "Removing: $CLEANUP_FILES"
+  rm -rf $CLEANUP_FILES
  ;;
- emailError)
- ;; # ?
- emailSuccess)
- ;; # ?
  *)
-  
+  # how did this happen
  ;;
 esac
 
