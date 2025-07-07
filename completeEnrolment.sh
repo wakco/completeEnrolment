@@ -54,6 +54,18 @@ LOG_FILE="$LIB/Logs/$DEFAULTS_NAME-$( if [ "$1" = "/" ]; then echo "Jamf-$WHO_LO
 
 # Functions
 
+defaultRead() {
+ defaults read "$DEFAULTS_FILE" "$1" 2>/dev/null
+}
+
+settingsPlist() {
+ eval "defaults $1 '$SETTINGS_PLIST' '$2' '$3' '$4'" 2>/dev/null
+}
+
+readSaved() {
+ settingsPlist read "$1" | base64 -d
+}
+
 logIt() {
  echo "$(date) - $@" 2>&1 | tee -a "$LOG_FILE"
 }
@@ -72,18 +84,6 @@ runIt() {
   ;;
  esac
  eval "$1" 2>&1 | tee -a "$LOG_FILE"
-}
-
-defaultRead() {
- defaults read "$DEFAULTS_FILE" "$1" 2>/dev/null
-}
-
-settingsPlist() {
- eval "defaults $1 '$SETTINGS_PLIST' '$2' '$3' '$4'" 2>/dev/null
-}
-
-readSaved() {
- settingsPlist read "$1" | base64 -d
 }
 
 myInstall() {
