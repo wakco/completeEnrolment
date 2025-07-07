@@ -70,6 +70,59 @@ logIt() {
  echo "$(date) - $@" 2>&1 | tee -a "$LOG_FILE"
 }
 
+# new runIt
+runIt() {
+ tries=0
+ success=false
+ case $1 in
+  logIt)
+   eval "$2" 2>&1 | tee -a "$LOG_FILE"
+   success=true
+  ;;
+  *)
+   track new "$3"
+   track add subtitle "$2"
+   track add status pending
+   track add statustext "running..."
+   until [ $tries -eq 5 ] || $success ; do
+    ((tries++))
+    track update statustext "Attempt $tries..."
+    track update status wait
+    case $1 in
+     shell)
+      
+      track update status success
+      success=true
+     ;;
+     install)
+      
+     ;|
+     mkuser)
+      
+     ;|
+     policy)
+      "$C_JAMF policy -event $3"
+     ;|
+     *)
+      if [ -e "$4" ]; then
+       success=true
+       track update status success
+      elif [ $tries -lt 5 ]; then
+       track update statustext "Attempt $tries failed, trying again in 5 seconds"
+       track update status error
+       sleep 5
+      else
+       track update statustext "Failed after $tries attempts"
+       track update status fail
+      fi
+     ;;
+    esac
+   done
+  ;;
+ esac
+}
+
+# old runIt
 runIt() {
  local report="$3"
  case $2 in
