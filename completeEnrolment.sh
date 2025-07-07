@@ -251,8 +251,11 @@ case $1 in
   fi
   
   # Install initial file
-  runIt "$C_JAMF policy -event \"${"$( defaultRead policyInitialFiles )":-"installInitialFiles"}\""
-  
+  if [[ "$DIALOG_ICON" = /* ]]; then
+   myInstall "$DIALOG_ICON" policy "${"$( defaultRead policyInitialFiles )":-"installInitialFiles"}"
+  else
+   runIt "$C_JAMF policy -event \"${"$( defaultRead policyInitialFiles )":-"installInitialFiles"}\""
+   fi
   # Install Installomator
   # This can be either the custom version from this repository, or the script that installs the
   # official version.
