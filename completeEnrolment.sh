@@ -23,6 +23,15 @@ CLEANUP_FILES=( "$C_ENROLMENT" )
 CLEANUP_FILES+=( "$LOGIN_PLIST" )
 CLEANUP_FILES+=( "$STARTUP_PLIST" )
 CLEANUP_FILES+=( "$DEFAULTS_PLIST" )
+JAMF_URL="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist jss_url )"
+JAMF_SERVER="$( echo "$JAMF_URL" | awk -F '(/|:)' '{ print $4 }' )"
+if SELF_SERVICE="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist self_service_plus_path 2>/dev/null )" ; then
+ SELF_SERVICE_URL="selfserviceplus:"
+else
+ SELF_SERVICE_URL="selfserviceapp:"
+ SELF_SERVICE="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist self_service_app_path 2>/dev/null )"
+fi
+CPU_ARCH="$( arch )"
 
 # Whose logged in
 
@@ -69,6 +78,14 @@ defaultRead() {
  defaults read "$DEFAULTS_FILE" "$1" 2>/dev/null
 }
 
+settingsPlist() {
+ eval "defaults $1 '$SETTINGS_PLIST' '$2' '$3' '$4'" 2>/dev/null
+}
+
+readSaved() {
+ settingsPlist read "$1" | base64 -d
+}
+
 myInstall() {
  local repeatattempts=5
  until [ -e "$1" ] || [ $repeatattempts -eq 0 ]; do
@@ -77,7 +94,7 @@ myInstall() {
     runIt "$C_JAMF policy -event $3" track
    ;;
    install)
-    runIt "$C_INSTALL $3 NOTIFY=silent GITHUBAPI=$GITHUB_API" custom "$C_INSTALL $3 NOTIFY=silent"
+    runIt "$C_INSTALL $3 NOTIFY=silent $GITHUB_API" custom "$C_INSTALL $3 NOTIFY=silent"
    ;;
    *)
     logIt "Error: myInstall: \$2 must be either policy or install, soft failing this install attempt by touching the check file"
@@ -137,6 +154,8 @@ track() {
 
 # Lets get started
 
+caffeinate -dimsuw $$ &
+
 until [ -e "$DEFAULTS_FILE" ]; do
  sleep 1
 done
@@ -156,6 +175,7 @@ if [ -e "$TRACKER_JSON" ]; then
 fi
 touch "$TRACKER_COMMAND" "$TRACKER_JSON"
 CLEANUP_FILES+=( "$TRACKER_JSON" )
+TEMP_ADMIN="${"$( defaultRead tempAdmin )":-"setup_admin"}"
 
 # And start processing
 
@@ -164,6 +184,39 @@ case $1 in
   # Install completeEnrolment
   logIt "Installing $C_ENROLMENT..."
   ditto "$0" "$C_ENROLMENT"
+  
+  # Load & save command line settings from Jamf Pro
+  # $4, $5, $6, $7, $8, $9, $10, $11 ?
+  if [ "$4" = "" ]; then
+   GITHUBAPI=""
+  else
+   GITHUBAPI="GITHUBAPI=$( echo "$4" | base64 -d )"
+   settingsPlist write github -string "$4"
+  fi
+  TEMP_NAME="${"$( defaultRead tempName )":-"Setup Admin"}"
+  if [ "$5" = "" ]; then
+   TEMP_PASS="setup"
+  else
+   TEMP_PASS="$( echo "$5" | base64 -d )"
+  fi
+  settingsPlist write temp -string "$( echo "$TEMP_PASS" | base64 )"
+  if [ "$6" = "" ]; then
+   LAPS_PASS="$TEMP_PASS"
+  else
+   LAPS_PASS="$( echo "$6" | base64 -d )"
+  fi
+  settingsPlist write laps -string "$( echo "$LAPS_PASS" | base64 )"
+  if [ "$7" = "" ] || [ "$8" = "" ]; then
+   logAndExit 4 "API details are required for access to the \$JAMF_ADMIN password, the following was supplied:\nAPI ID: $7\nAPI Secret: $8"
+  else
+   API_ID="$( echo "$7" | base64 -d )"
+   settingsPlist write apiId -string "$7"
+   API_SECRET="$( echo "$8" | base64 -d )"
+   settingsPlist write apiSecret -string "$8"
+  fi
+  EMAIL_PASS="${9:-""}"
+  settingsPlist write email -string "$9"
+
 
   # Initialise dialog setup file, our "tracker"
   # although plutil can create an empty json, it can't insert into it, incorrectly mistaking the
@@ -192,7 +245,7 @@ case $1 in
   sleep 1
   
   # Install Rosetta (just in case, and skip it for macOS 28+)
-  if [ "$( arch )" = "arm64" ] && [ $(sw_vers -productVersion | cut -d '.' -f 1) -lt 28 ]; then
+  if [ "$CPU_ARCH" = "arm64" ] && [ $(sw_vers -productVersion | cut -d '.' -f 1) -lt 28 ]; then
    logIt "Installing Rosetta on Apple Silicon..."
    runIt "/usr/sbin/softwareupdate --install-rosetta --agree-to-license"
   fi
@@ -219,6 +272,7 @@ case $1 in
   # email, and API passwords). This is to allow for hopefully a more secure process, but limiting
   # the access to some of the information to say only during the first 24 hours (at least coming
   # from Jamf Pro that way).
+  setopt extended_glob
   case $WHO_LOGGED in
    _mbsetupuser)
     # Get setup quickly and start atLoginWindow for initial step tracking followed by a restart.
@@ -237,8 +291,8 @@ case $1 in
     # Start Dialog
     launchctl load -S LoginWindow "$LOGIN_PLIST"
     # add completesetup as automatic login without volume owner details
-   ;;
-   *)
+   ;|
+   ^_mbsetupuser)
     # We will need the login details of a Volume Owner (an account with a Secure Token) to proceed,
     # so we'll ask for it, and in this instance, no need to restart, once the login details are
     # collected, start the dialog and just start processing (after setting the computer name).
@@ -247,11 +301,12 @@ case $1 in
     
     #
     defaults write "$LOGIN_PLIST" ProgramArguments -array "$C_ENROLMENT" "startTrackerDialog"
-    launchctl load -S LoginWindow "$LOGIN_PLIST"
-   ;;
-  esac
-  # set computername
-  case $WHO_LOGGED in
+    launchctl load "$LOGIN_PLIST"
+   ;|
+   *)
+    # set computername
+    runIt "$C_JAMF policy -event ${"$( defaultRead policyComputerName )":-"fixComputerName"}"
+   ;|
    _mbsetupuser)
     # restart by sending quit message to dialog
     defaults write "$STARTUP_PLIST" Label "$DEFAULTS_NAME.startup"
@@ -264,6 +319,7 @@ case $1 in
     "$C_ENROLMENT" process
    ;;
   esac
+  unsetopt extended_glob
  ;;
  *)
   # load saved settings
