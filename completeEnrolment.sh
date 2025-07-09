@@ -147,7 +147,7 @@ myInstall() {
     runIt "$C_JAMF policy -event $3" track
    ;;
    install)
-    runIt "$C_INSTALL $3 NOTIFY=silent $GITHUB_API" custom "$C_INSTALL $3 NOTIFY=silent"
+    runIt "$C_INSTALL $3 NOTIFY=silent $GITHUB_API" custom "$C_INSTALL $3"
    ;;
    *)
     logIt "Error: myInstall: \$2 must be either policy or install, soft failing this install attempt by touching the check file"

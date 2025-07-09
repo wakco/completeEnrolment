@@ -5,6 +5,50 @@
   "remove_empty_properties": true
  },
  "properties": {
-  
+  "installs": {
+   "title": "Installs",
+   "description": "",
+   "type": "array",
+   "items": {
+    "title": "Install",
+    "type": "object",
+    "format": "grid",
+    "properties": {
+     "commandtype": {
+      "default": "policy",
+      "enum": [
+       "install",
+       "jamfapp",
+       "jamfpolicy",
+       "macapp",
+       "shell"
+      ],
+      "options": {
+       "enum_titles": [
+        "Installomator",
+        "Jamf App Installer",
+        "Jamf Policy",
+        "Mac App Store",
+        "Shell command"
+       ]
+      },
+      "title": "Type",
+      "type": "string"
+     },
+     "command": {
+      "title": "Command",
+      "description": "Command, Label, Policy, or Self Service Entry",
+      "type": "string",
+      "minLength": 1
+     },
+     "success": {
+      "title": "Success check",
+      "description": "File to check for",
+      "type": "string",
+      "minLength": 1
+     }
+    }
+   }
+  }
  }
 }
