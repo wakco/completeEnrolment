@@ -167,11 +167,7 @@ myInstall() {
 track() {
  case $1 in
   bool|integer|string)
-   if [ "$( jq -Mr ".$2 // empty" "$TRACKER_JSON" )" = "" ]; then
-    eval "plutil -insert $2 -$1 '$3' '$TRACKER_JSON'"
-   else
-    eval "plutil -replace $2 -$1 '$3' '$TRACKER_JSON'"
-   fi
+   eval "plutil -replace $2 -$1 '$3' '$TRACKER_JSON'"
    if [ -e "$TRACKER_RUNNING" ]; then
     echo "$2: $3" >> "$TRACKER_COMMAND"
     sleep 0.1
@@ -190,13 +186,8 @@ track() {
     track integer currentitem $TRACKER_ITEM
    fi
   ;;
-  add)
-   eval "plutil -insert listitem.$TRACKER_ITEM.$2 -string '$3' -append '$TRACKER_JSON'"
-  ;|
   update)
-   eval "plutil -replace listitem.$TRACKER_ITEM.$2 -string '$3' -append '$TRACKER_JSON'"
-  ;|
-  add|update)
+   eval "plutil -replace listitem.$TRACKER_ITEM.$2 -string '$3' '$TRACKER_JSON'"
    if [ -e "$TRACKER_RUNNING" ]; then
     echo "listitem: index: $TRACKER_ITEM, $2: $3" >> "$TRACKER_COMMAND"
     sleep 0.1
