@@ -14,34 +14,53 @@
     "type": "object",
     "format": "grid",
     "properties": {
+     "title": {
+      "title": "Title",
+      "description": "Title for the App, Command, Label, Policy, or Self Service Entry",
+      "type": "string",
+      "minLength": 1
+     },
      "commandtype": {
       "default": "policy",
       "enum": [
+       "command",
        "install",
        "jamfapp",
-       "jamfpolicy",
-       "macapp",
-       "shell"
+       "policy",
+       "macapp"
       ],
       "options": {
        "enum_titles": [
+        "Shell command",
         "Installomator",
         "Jamf App Installer",
         "Jamf Policy",
-        "Mac App Store",
-        "Shell command"
+        "Mac App Store"
        ]
       },
       "title": "Type",
       "type": "string"
      },
      "command": {
-      "title": "Command",
+      "title": "Primary Command",
       "description": "Command, Label, Policy, or Self Service Entry",
-      "type": "string",
-      "minLength": 1
+      "type": "string"
      },
-     "success": {
+     "successtype": {
+      "default": "file",
+      "enum": [
+       "file",
+       "result",
+       "test"
+      ],
+      "options": {
+       "enum_titles": [
+        "File Path",
+        "Command Result",
+        "Shell test"
+       ]
+      },
+     "successtest": {
       "title": "Success check",
       "description": "File to check for",
       "type": "string",
