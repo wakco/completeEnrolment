@@ -20,22 +20,44 @@
       "type": "string",
       "minLength": 1
      },
+     "subtitle": {
+      "title": "Subtitle",
+      "description": "Optional subtitle for the App, Command, Label, Policy, or Self Service Entry",
+      "type": "string"
+     },
+     "subtitletype": {
+      "default": "command",
+      "enum": [
+       "secure",
+       "combine",
+       "command"
+      ],
+      "options": {
+       "enum_titles": [
+        "Use only the supplied subtitle",
+        "Combine the subtitle with the command",
+        "Display the command"
+       ]
+      },
+      "title": "Subtitle Type",
+      "type": "string"
+     },
      "commandtype": {
       "default": "policy",
       "enum": [
        "command",
        "install",
-       "jamfapp",
        "policy",
-       "macapp"
+       "selfservice",
+       "none"
       ],
       "options": {
        "enum_titles": [
         "Shell command",
         "Installomator",
-        "Jamf App Installer",
         "Jamf Policy",
-        "Mac App Store"
+        "Self Service URL",
+        "Test only"
        ]
       },
       "title": "Type",
@@ -43,7 +65,12 @@
      },
      "command": {
       "title": "Primary Command",
-      "description": "Command, Label, Policy, or Self Service Entry",
+      "description": "Command, Label, Policy, or Self Service URL (Mac App Store, or Jamf App Installer)",
+      "type": "string"
+     },
+     "icon": {
+      "title": "Icon",
+      "description": "Web address, Path, or SF Symbol",
       "type": "string"
      },
      "successtype": {
@@ -51,20 +78,58 @@
       "enum": [
        "file",
        "result",
-       "test"
+       "test",
+       "teamid",
+       "appstore"
       ],
       "options": {
        "enum_titles": [
         "File Path",
         "Command Result",
-        "Shell test"
+        "Shell test",
+        "Team ID",
+        "Mac App Store"
        ]
       },
+      "title": "Success Test type",
+      "description": "",
+      "type": "string"
+     },
      "successtest": {
-      "title": "Success check",
-      "description": "File to check for",
-      "type": "string",
-      "minLength": 1
+      "title": "Success test",
+      "description": "File Path, or shell command to test with",
+      "type": "string"
+     },
+     "successteam": {
+      "title": "Success Team ID",
+      "description": "The Developer Team ID to check for",
+      "type": "string"
+     },
+     "backuptype": {
+      "default": "none",
+      "enum": [
+       "command",
+       "install",
+       "policy",
+       "selfservice",
+       "none"
+      ],
+      "options": {
+       "enum_titles": [
+        "Shell command",
+        "Installomator",
+        "Jamf Policy",
+        "Self Service URL",
+        "No Backup"
+       ]
+      },
+      "title": "Backup Type",
+      "type": "string"
+     },
+     "backupcommand": {
+      "title": "Backup Command",
+      "description": "Command, Label, Policy, or Self Service URL (Mac App Store, or Jamf App Installer)",
+      "type": "string"
      }
     }
    }

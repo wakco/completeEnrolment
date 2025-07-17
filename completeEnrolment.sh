@@ -19,16 +19,17 @@ DEFAULTS_FILE="$LIB/Managed Preferences/$DEFAULTS_PLIST"
 LOGIN_PLIST="$LIB/LaunchAgents/$DEFAULTS_PLIST"
 STARTUP_PLIST="$LIB/LaunchDaemons/$DEFAULTS_PLIST"
 SETTINGS_PLIST="$LIB/Preferences/$DEFAULTS_PLIST"
+CACHE="$LIB/Caches/completeEnrolment"
+mkdir -p "$CACHE"
 CLEANUP_FILES=( "$C_ENROLMENT" )
 CLEANUP_FILES+=( "$LOGIN_PLIST" )
 CLEANUP_FILES+=( "$STARTUP_PLIST" )
 CLEANUP_FILES+=( "$SETTINGS_PLIST" )
+CLEANUP_FILES+=( "$CACHE" )
 JAMF_URL="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist jss_url )"
 JAMF_SERVER="$( echo "$JAMF_URL" | awk -F '(/|:)' '{ print $4 }' )"
-if SELF_SERVICE="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist self_service_plus_path 2>/dev/null )" ; then
- SELF_SERVICE_URL="selfserviceplus:"
-else
- SELF_SERVICE_URL="selfserviceapp:"
+SELF_SERVICE="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist self_service_plus_path 2>/dev/null )"
+if [ "$SELF_SERVICE" = "" ]; then
  SELF_SERVICE="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist self_service_app_path 2>/dev/null )"
 fi
 CPU_ARCH="$( arch )"
@@ -79,6 +80,10 @@ LOG_FILE="$LIB/Logs/$DEFAULTS_NAME-$( if [ "$1" = "/" ]; then echo "Jamf-$WHO_LO
 
 defaultRead() {
  defaults read "$DEFAULTS_FILE" "$1" 2>/dev/null
+}
+
+listRead() {
+ plutil -extract "$1" raw -o - "$DEFAULTS_FILE" 2>/dev/null
 }
 
 settingsPlist() {
@@ -158,14 +163,24 @@ track() {
 
 # for trackIt and repeatIt:
 # command type (command/policy/label), (shell command, jamf policy trigger, or Installomator label),
-#  status confirmation type, file to check for (for status confirmation type: file)
+#  status confirmation type, file to check for (for status confirmation type: file), Team ID
 trackIt() {
  track update status wait
- if [ COUNTDOWN = "" ]; then
-  track update statustext "Running..."
- else
-  track update statustext "Attempting #$COUNTDOWN Running..."
- fi
+ case $3 in
+  date)
+   track update statustext "Checking..."
+  ;;
+  pause)
+   track update statustext "Paused."
+  ;;
+  *)
+   if [ COUNTDOWN = "" ]; then
+    track update statustext "Running..."
+   else
+    track update statustext "Attempting #$COUNTDOWN Running..."
+   fi
+  ;;
+ esac
  case $1 in
   command:
    runIt "$2"
@@ -176,32 +191,65 @@ trackIt() {
   install:
    runIt "$C_INSTALL $2 NOTIFY=silent $GITHUB_API"
   ;;
+  selfService)
+   runIt "open -j -a '$SELF_SERVICE' -u '$2'"
+  ;;
  esac
  THE_RESULT=$?
  case $3 in
+  date)
+   track update statustext "Last Updated: $(date)"
+  ;|
+  pause)
+   track update statustext "Resumed."
+  ;|
+  date|pause)
+   track update status pending
+   return 0
+  ;;
+  *)
+   track update statustext "Confirming..."
+  :|
+  appstore)
+   THE_TEST="CHECKAPP=\"\$( spctl -a -vv '$$4' 2>&1 )\" && [[ \"\$CHECKAPP\" = *'Mac App Store'* ]]"
+  ;|
+  teamid)
+   THE_TEST=false
+   if CHECKAPP="$( spctl -a -vv '$$4' 2>&1 )"; then
+    if [[ "$CHECKAPP" = *"($5)"* ]]; then
+     THE_TEST=true
+    else
+     track update status success
+     track update statustext "Completed, but Developer ID ($5) didn't match installed ID ($( echo "$CHECKAPP" | awk '/origin=/ {print $NF }' | tr -d '()' ))"
+     return 0
+    fi
+   fi
+  :|
   result:
    THE_TEST="[ '$THE_RESULT' -eq 0 ]"
-  ;;
+  ;|
   file:
    THE_TEST="[ -e '$4' ]"
-  ;;
+  ;|
   test:
    THE_TEST="$4"
+  ;|
+  *)
+   if eval "$THE_TEST" 2>&1 >> "$LOG_FILE"; then
+    track update status success
+    track update statustext "Completed"
+    return 0
+   else
+    track update status fail
+    if [ $COUNTDOWN = "" ]; then
+     track update statustext "Failed, waiting for next attempt..."
+    else
+     track update statustext "Attempt #$COUNTDOWN Failed, waiting for next attempt..."
+    fi
+    return 1
+   fi
   ;;
  esac
- if eval "$THE_TEST" 2>&1 >> "$LOG_FILE"; then
-  track update status success
-  track update statustext "Completed"
-  return 0
- else
-  track update status pending
-  if [ $COUNTDOWN = "" ]; then
-   track update statustext "Failed, waiting for next attempt..."
-  else
-   track update statustext "Attempt #$COUNTDOWN Failed, waiting for next attempt..."
-  fi
-  return 1
- fi
 }
 
 repeatIt() {
@@ -211,7 +259,7 @@ repeatIt() {
   ((COUNTDOWN++))
  done
  if [ $COUNTDOWN -eq 6 ]; then
-  track update status fail
+  track update status error
   track update statustext "Failed after 5 attempts"
   unset COUNTDOWN
   return 1
@@ -499,75 +547,170 @@ case $1 in
    secure "'$C_MKUSER' --username $LAPS_ADMIN --password '$DEFAULT_PASS' --real-name '$LAPS_NAME' --home /private/var/$LAPS_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes " "Creating username completesetup" \
    file "/private/var/$LAPS_ADMIN"
  
-  if [ "$( )" = "" ]
- 
-  track new "Task List"
-  track update status pending
-  track update statustext "Loading..."
-  track update subtitle "Loading the task list from the config profile."
-  # Identify index of first cycling check item, until now each item would retry automatically
-  #  immediately for up to 5 time, now we want to switch to trying everything else before retrying,
-  #  and keep going until everything is successful, or a specified timeout (at 5 minutes per item?).
-  TRACKER_START=$($( jq 'currentitem' ):--1}
-  track integer startitem $((TRACKER_START+1))
+  if [ "$( defaults read "$DEFAULTS_FILE" installs 2>/dev/null )" != "" ]; then
+   
+   track new "Task List"
+   track update status pending
+   track update statustext "Loading..."
+   track update subtitle "Loading the task list from the config profile."
+   # Identify index of first cycling check item, until now each item would retry automatically
+   #  immediately for up to 5 time, now we want to switch to trying everything else before retrying,
+   #  and keep going until everything is successful, or a specified timeout (at 5 minutes per item?).
+   TRACKER_START=$($( jq 'currentitem' ):--1}
+   track integer startitem $((TRACKER_START+1))
+   
+   # Now is a good time to start Self Service in the background
+   open -j -a "$SELF_SERVICE"
 
-  # load software installs
-  NEW_INDEX=0
-  track update status wait
-  until [ $NEW_INDEX -eq $( "$( plutil -extract "installs" raw -o - "$DEFAULTS_FILE" )" ) ]; do
-   # Cheating by using TRACKER_START to update the Task List loading entry
-   plutil -replace listitem.$TRACKER_START.statustext -string "Loading task #$((NEW_INDEX+1))" "$LOG_JSON"
-   echo "listitem: index: $TRACKER_START, statustext: Loading task #$((NEW_INDEX+1))"
+   # load software installs
+   NEW_INDEX=0
+   track update status wait
+   until [ $NEW_INDEX -eq $( "$( listRead "installs" )" ) ]; do
+    # Cheating by using TRACKER_START to update the Task List loading entry
+    plutil -replace listitem.$TRACKER_START.statustext -string "Loading task #$((NEW_INDEX+1))" "$LOG_JSON"
+    echo "listitem: index: $TRACKER_START, statustext: Loading task #$((NEW_INDEX+1))"
+    sleep 0.1
+    
+    # for each item in config profile
+    track new "$( listRead "installs.$NEW_INDEX.title" )"
+    COMMAND="$( listRead "installs.$NEW_INDEX.command" )"
+    track update command "$COMMAND"
+    track update commandtype "$( listRead "installs.$NEW_INDEX.commandtype" )"
+    SUBTITLE="$( listRead "installs.$NEW_INDEX.subtitle" )"
+    track update suppliedsubtitle "$SUBTITLE"
+    SUBTITLE_TYPE="$( listRead "installs.$NEW_INDEX.subtitletype" )"
+    track update subtitletype "$SUBTITLE_TYPE"
+    case $SUBTITLE_TYPE in
+     secure)
+      track update subtitle "$SUBTITLE"
+     ;;
+     command)
+      track update subtitle "$COMMAND"
+     ;;
+     combine)
+      track update subtitle "$SUBTITLE - $COMMAND"
+     ;;
+    esac
+    track update successtype "$( listRead "installs.$NEW_INDEX.successtype" )"
+    track update successtest "$( listRead "installs.$NEW_INDEX.successtest" )"
+    track update successteam "$( listRead "installs.$NEW_INDEX.successteam" )"
+    track update subtitle "$( listRead "installs.$NEW_INDEX.subtitle" )"
+    THE_ICON="$( listRead "installs.$NEW_INDEX.icon" )"
+    if [ "$THE_ICON" = "" ]; then
+     track update icon none
+    else
+     case $THE_ICON; in
+      http*:
+       # Cache the icon locally, as scrolling the window causes swiftDialog to reload the icons, which is
+       #  not so good when they are hosted, so downloading them to a folder and directing swiftDialog to
+       #  the downloaded copy makes much more sense.
+       ICON_NAME="$CACHE/$( basename "$THE_ICON" )"
+       runIt "curl -s -o '$ICON_NAME' '$THE_ICON'"
+       THE_ICON="$CACHE/icon-$NEW_INDEX-$( js 'currentitem' ).png"
+       runIt "sips -s format png '$ICON_NAME' --out '$THE_ICON'"
+      ;&
+      *)
+       track update icon "$THE_ICON"
+      ;;
+     esac
+    fi
+    track update backuptype "$( listRead "installs.$NEW_INDEX.backuptype" )"
+    track update backupcommand "$( listRead "installs.$NEW_INDEX.backupcommand" )"
+    track update status pending
+    track update statustext "waiting to install..."
+    ((NEW_INDEX++))
+   done
+   track new "Inventory Update"
+   track update command "$C_JAMF recon"
+   track update commndtype command
+   track update subtitle "jamf recon"
+   track update successtype "date"
+   track new "Pause for 30 seconds"
+   track update command "sleep 30"
+   track update commndtype command
+   track update subtitle "Pause for 30 seconds before checking again."
+   track update successtype "pause"
+   
+   # Restart dialog (just to make sure it got everything).
+   dialog --ontop --timer 15 --title "Reloading..." --message "Reloading the tracking dialog..." --icon none --button1disabled --width 400 --height 150 &
+   sleep 2
+   echo "quit:" >> "$TRACKER_COMMAND"
+   sleep 5
+   launchctl kickstart gui/$( id -u $( who | grep -v mbsetupuser | grep -m1 console | cut -d " " -f 1 ) )/"$DEFAULTS_NAME.loginwindow"
+   sleep 5
+   plutil -replace listitem.$TRACKER_START.statustext -string "Loaded" "$TRACKER_JSON"
+   echo "listitem: index: $TRACKER_START, statustext: Loaded" >> "$TRACKER_COMMAND"
+   sleep 0.1
+   plutil -replace listitem.$TRACKER_START.status -string "success" "$TRACKER_JSON"
+   echo "listitem: index: $TRACKER_START, status: success" >> "$TRACKER_COMMAND"
    sleep 0.1
    
-   # for each item in config profile
-   track new "$( plutil -extract "installs.$NEW_INDEX.title" raw -o - "$DEFAULTS_FILE" )"
-   COMMAND="$( plutil -extract "installs.$NEW_INDEX.command" raw -o - "$DEFAULTS_FILE" )"
-   track update command "$COMMAND"
-   COMMAND_TYPE="$( plutil -extract "installs.$NEW_INDEX.commandtype" raw -o - "$DEFAULTS_FILE" )"
-   track update commandtype "$COMMAND_TYPE"
-   if [ "$COMMAND_TYPE" = "secure" ]; then
-    track update subtitle "$( plutil -extract "installs.$NEW_INDEX.subtitle" raw -o - "$DEFAULTS_FILE" )"
-   else
-    track update subtitle "$COMMAND"
-   fi
-   track update successtype "$( plutil -extract "installs.$NEW_INDEX.successtype" raw -o - "$DEFAULTS_FILE" )"
-   track update successtest "$( plutil -extract "installs.$NEW_INDEX.successtest" raw -o - "$DEFAULTS_FILE" )"
-   track update subtitle "$( plutil -extract "installs.$NEW_INDEX.subtitle" raw -o - "$DEFAULTS_FILE" )"
-   track update status pending
-   track update statustext "waiting..."
-   ((NEW_INDEX++))
-  done
-  plutil -replace listitem.$TRACKER_START.statustext -string "Loaded" "$LOG_JSON"
-  echo "listitem: index: $TRACKER_START, statustext: Loaded"
-  sleep 0.1
-  plutil -replace listitem.$TRACKER_START.status -string "success" "$LOG_JSON"
-  echo "listitem: index: $TRACKER_START, status: success"
-  sleep 0.1
-  
-  # Restart dialog (just to make sure it got everything).
-  track string message "Restarting dialog to avoid any visible tracking issues..."
-  plutil -replace message -string "Restarting dialog to avoid any visible tracking issues..." "$LOG_JSON"
-  sleep 2
-  echo "quit:" >> "$TRACKER_COMMAND"
-  sleep 2
-  track string message "Please wait while this computer is set up...<br>Log File available at: $LOG_FILE"
-  plutil -replace message -string "Please wait while this computer is set up...<br>Log File available at: $LOG_FILE" "$LOG_JSON"
-  sleep 2
-  launchctl kickstart gui/$( id -u $( who | grep -v mbsetupuser | grep -m1 console | cut -d " " -f 1 ) )/"$DEFAULTS_NAME.loginwindow"
-  sleep 2
-  
-  # process software installs
-  track integer currentitem $( jq 'startitem' )
-  until [ $( jq 'currentitem' ) -ge $( "$( plutil -extract "listitem" raw -o - "$TRACKER_JSON" )" ) ]; do
-   trackIt "$( jq 'listitem[.currentitem].commandtype' )" \
-    "$( jq 'listitem[.currentitem].command' )" \
-    "$( jq 'listitem[.currentitem].successtype' )" \
-    "$( jq 'listitem[.currentitem].successtest' )"
-   
-   track integer currentitem $(($( jq 'currentitem' )+1))
-  done
-  
+   # process software installs
+   START_TIME=$( date "+%s" )
+   WAIT_TIME=$(($NEW_INDEX*${"$( defaultRead perAPP )":-"5"}*60))
+   FINISH_TIME=$(($START_TIME+$WAIT_TIME))
+   INFOBOX="**macOS $( sw_vers -productversion )** on  <br>$( scutil --get ComputerName )  <br><br>"
+   INFOBOX+="**Started:**  <br>$( date -jr "$START_TIME" "+%d/%m/%Y %H:%M" )  <br><br>"
+   INFOBOX+="**Estimated Finish:**  <br>$( date -jr "$FINISH_TIME" "+%d/%m/%Y %H:%M" )  <br><br>"
+   INFOBOX+="**Apps to Install:** $NEW_INDEX<br><br>"
+   FINISHED=false
+   COUNT=0
+   until $FINISHED; do
+    FAILED=false
+    track integer currentitem $( jq 'startitem' )
+    until [ $( jq 'currentitem' ) -ge $( "$( plutil -extract "listitem" raw -o - "$TRACKER_JSON" )" ) ]; do
+     if [ "$( jq 'listitem[.currentitem].success' )" != "success" ]; then
+      trackIt "$( jq 'listitem[.currentitem].commandtype' )" \
+       "$( jq 'listitem[.currentitem].command' )" \
+       "$( jq 'listitem[.currentitem].successtype' )" \
+       "$( jq 'listitem[.currentitem].successtest' )" \
+       "$( jq 'listitem[.currentitem].successteam' )"
+      case "$( jq 'listitem[.currentitem].success' )" in
+       success)
+        ((SUCCESS_COUNT++))
+       ;;
+       fail)
+        FAILED=true
+        if [ $COUNT -eq 10 ]; then
+         track update commandtype "$( jq 'listitem[.currentitem].backuptype' )"
+         track update command "$( jq 'listitem[.currentitem].backupcommand' )"
+         case "$( jq 'listitem[.currentitem].subtitletype' )" in
+          command)
+           track update subtitle "$( jq 'listitem[.currentitem].backupcommand' )"
+          ;;
+          combine)
+           track update subtitle "$( jq 'listitem[.currentitem].suppliedsubtitle' ) - $( jq 'listitem[.currentitem].backupcommand' )"
+          ;;
+         esac
+        fi
+       ;;
+      esac
+     fi
+     sleep 5
+     track integer currentitem $(($( jq 'currentitem' )+1))
+    done
+    ((COUNT++))
+    if ! $FAILED || [ "$( date "+%s" )" -gt $FINISH_TIME ]; then
+     $FINISHED=true
+    fi
+   done
+   SUCCESS_COUNT=0
+   FAILED_COUNT=0
+   track integer currentitem 0
+   until [ $( jq 'currentitem' ) -ge $( "$( plutil -extract "listitem" raw -o - "$TRACKER_JSON" )" ) ]; do
+    case "$( jq 'listitem[.currentitem].success' )" in
+     pending)
+      track update success success
+     :&
+     success)
+      ((SUCCESS_COUNT++))
+     ;;
+     fail)
+      ((FAILED_COUNT++))
+      track update success error
+     ;;
+   done
+  fi
   # trigger cleanup
   defaults write "$STARTUP_PLIST" ProgramArguments -array "$C_ENROLMENT" "cleanUp"
  ;;
