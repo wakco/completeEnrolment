@@ -128,9 +128,19 @@
    "description": "Jamf policy name used to install initial files such as the images used by swiftDialog and the admin accounts above. Defaults to installInitialFiles.",
    "type": "string"
   },
+  "policyADUnbind": {
+   "title": "Jamf policy for unbinding from Active Directory",
+   "description": "Jamf policy name used to unbind the computer from Active Directory. Defaults to adUnbind.",
+   "type": "string"
+  },
   "policyComputerName": {
    "title": "Jamf policy for Managing the Computer Name",
    "description": "Jamf policy name used to manage the computer name, that is to preset the computer name before binding to Active Directory. Defaults to fixComputerName.",
+   "type": "string"
+  },
+  "policyADBind": {
+   "title": "Jamf policy for binding to Active Directory",
+   "description": "Jamf policy name used to bind the computer to Active Directory. Defaults to adBind.",
    "type": "string"
   },
   "manualContinue": {

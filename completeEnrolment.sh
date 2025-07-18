@@ -102,31 +102,6 @@ runIt() {
  eval "$1" 2>&1 | tee -a "$LOG_FILE"
 }
 
-myInstall() {
- local repeatattempts=5
- until [ -e "$1" ] || [ $repeatattempts -eq 0 ]; do
-  case $2 in
-   policy)
-    runIt "$C_JAMF policy -event $3" track
-   ;;
-   install)
-    runIt "$C_INSTALL $3 NOTIFY=silent $GITHUB_API" custom "$C_INSTALL $3"
-   ;;
-   *)
-    logIt "Error: myInstall: \$2 must be either policy or install, soft failing this install attempt by touching the check file"
-    touch "$1"
-   ;;
-  esac
-  if [ ! -e "$1" ]; then
-   sleep 5
-   ((repeatattempts--))
-  fi
- done
- if [ ! -e "$1" ]; then
-  
- fi
-}
-
 track() {
  case $1 in
   bool|integer|string)
@@ -649,10 +624,13 @@ case $1 in
    START_TIME=$( date "+%s" )
    WAIT_TIME=$(($NEW_INDEX*${"$( defaultRead perAPP )":-"5"}*60))
    FINISH_TIME=$(($START_TIME+$WAIT_TIME))
+   SUCCESS_COUNT=0
    INFOBOX="**macOS $( sw_vers -productversion )** on  <br>$( scutil --get ComputerName )  <br><br>"
    INFOBOX+="**Started:**  <br>$( date -jr "$START_TIME" "+%d/%m/%Y %H:%M" )  <br><br>"
    INFOBOX+="**Estimated Finish:**  <br>$( date -jr "$FINISH_TIME" "+%d/%m/%Y %H:%M" )  <br><br>"
-   INFOBOX+="**Apps to Install:** $NEW_INDEX<br><br>"
+   INFOBOX+="**Apps to Install:** $NEW_INDEX  <br><br>"
+   INFOBOX+='**Installed:** $SUCCESS_COUNT  <br><br>'
+   eval "track string infobox '$INFOBOX'"
    FINISHED=false
    COUNT=0
    until $FINISHED; do
@@ -668,6 +646,7 @@ case $1 in
       case "$( jq 'listitem[.currentitem].success' )" in
        success)
         ((SUCCESS_COUNT++))
+        eval "track string infobox '$INFOBOX'"
        ;;
        fail)
         FAILED=true
