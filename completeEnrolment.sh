@@ -100,7 +100,10 @@ readSaved() {
 }
 
 runIt() {
- eval "$1" 2>&1 | tee -a "$LOG_FILE"
+ local THE_RESULT="$( eval "$1" 2>&1 )"
+ local THE_RETURN=$?
+ echo "$(date) --- Executed '${2:-"$1"}' which returned signal $THE_RETURN and:\n$THE_RESULT" | tee -a "$LOG_FILE"
+ return $THE_RETURN
 }
 
 track() {
@@ -532,7 +535,7 @@ case $1 in
    # Identify index of first cycling check item, until now each item would retry automatically
    #  immediately for up to 5 time, now we want to switch to trying everything else before retrying,
    #  and keep going until everything is successful, or a specified timeout (at 5 minutes per item?).
-   TRACKER_START=$($( jq 'currentitem' ):--1}
+   TRACKER_START=${$( jq 'currentitem' ):--1}
    track integer startitem $((TRACKER_START+1))
    
    # Now is a good time to start Self Service in the background
@@ -689,6 +692,7 @@ case $1 in
       ((FAILED_COUNT++))
       track update success error
      ;;
+    esac
    done
   fi
   # trigger cleanup
@@ -704,4 +708,3 @@ case $1 in
   # how did this happen
  ;;
 esac
-
