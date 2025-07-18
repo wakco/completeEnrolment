@@ -78,6 +78,11 @@ LOG_FILE="$LIB/Logs/$DEFAULTS_NAME-$( if [ "$1" = "/" ]; then echo "Jamf-$WHO_LO
 
 # Functions
 
+logIt() {
+ echo "$(date) - $@" 2>&1 | tee -a "$LOG_FILE"
+}
+logIt "###################### completeEnrolment started with $1."
+
 defaultRead() {
  defaults read "$DEFAULTS_FILE" "$1" 2>/dev/null
 }
@@ -92,10 +97,6 @@ settingsPlist() {
 
 readSaved() {
  settingsPlist read "$1" | base64 -d
-}
-
-logIt() {
- echo "$(date) - $@" 2>&1 | tee -a "$LOG_FILE"
 }
 
 runIt() {
@@ -119,13 +120,13 @@ track() {
     echo "listitem: add, title: $2" >> "$TRACKER_COMMAND"
     sleep 0.1
    fi
-   TRACKER_ITEM=$($( jq 'currentitem' ):--1}
+   TRACKER_ITEM=${$( jq 'currentitem' ):--1}
    ((TRACKER_ITEM++))
    track integer currentitem $TRACKER_ITEM
    logIt "Added task #$TRACKER_ITEM: $2"
   ;;
   update)
-   TRACKER_ITEM=$($( jq 'currentitem' ):-0}
+   TRACKER_ITEM=${$( jq 'currentitem' ):-0}
    logIt "Updating $2 of task #$TRACKER_ITEM \"$( jq 'listitem[.currentitem].title' )\" to: $3"
    eval "plutil -replace listitem.$TRACKER_ITEM.$2 -string '$3' '$TRACKER_JSON'"
    if [ -e "$TRACKER_RUNNING" ]; then
@@ -157,13 +158,13 @@ trackIt() {
   ;;
  esac
  case $1 in
-  command:
+  command)
    runIt "$2"
   ;;
-  policy:
+  policy)
    runIt "$C_JAMF policy -event $2"
   ;;
-  install:
+  install)
    runIt "$C_INSTALL $2 NOTIFY=silent $GITHUB_API"
   ;;
   selfService)
@@ -184,7 +185,7 @@ trackIt() {
   ;;
   *)
    track update statustext "Confirming..."
-  :|
+  ;|
   appstore)
    THE_TEST="CHECKAPP=\"\$( spctl -a -vv '$$4' 2>&1 )\" && [[ \"\$CHECKAPP\" = *'Mac App Store'* ]]"
   ;|
@@ -199,14 +200,14 @@ trackIt() {
      return 0
     fi
    fi
-  :|
-  result:
+  ;|
+  result)
    THE_TEST="[ '$THE_RESULT' -eq 0 ]"
   ;|
-  file:
+  file)
    THE_TEST="[ -e '$4' ]"
   ;|
-  test:
+  test)
    THE_TEST="$4"
   ;|
   *)
@@ -575,7 +576,7 @@ case $1 in
      track update icon none
     else
      case $THE_ICON; in
-      http*:
+      http*)
        # Cache the icon locally, as scrolling the window causes swiftDialog to reload the icons, which is
        #  not so good when they are hosted, so downloading them to a folder and directing swiftDialog to
        #  the downloaded copy makes much more sense.
@@ -680,7 +681,7 @@ case $1 in
     case "$( jq 'listitem[.currentitem].success' )" in
      pending)
       track update success success
-     :&
+     ;&
      success)
       ((SUCCESS_COUNT++))
      ;;
