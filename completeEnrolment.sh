@@ -640,7 +640,7 @@ case $1 in
    until $FINISHED; do
     FAILED=false
     track integer currentitem $( jq 'startitem' )
-    until [ $( jq 'currentitem' ) -ge $( "$( plutil -extract "listitem" raw -o - "$TRACKER_JSON" )" ) ]; do
+    until [ $( jq 'currentitem' ) -ge $( plutil -extract "listitem" raw -o - "$TRACKER_JSON" ) ]; do
      if [ "$( jq 'listitem[.currentitem].success' )" != "success" ]; then
       trackIt "$( jq 'listitem[.currentitem].commandtype' )" \
        "$( jq 'listitem[.currentitem].command' )" \
@@ -680,7 +680,7 @@ case $1 in
    SUCCESS_COUNT=0
    FAILED_COUNT=0
    track integer currentitem 0
-   until [ $( jq 'currentitem' ) -ge $( "$( plutil -extract "listitem" raw -o - "$TRACKER_JSON" )" ) ]; do
+   until [ $( jq 'currentitem' ) -ge $( plutil -extract "listitem" raw -o - "$TRACKER_JSON" ) ]; do
     case "$( jq 'listitem[.currentitem].success' )" in
      pending)
       track update success success
