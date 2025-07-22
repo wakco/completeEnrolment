@@ -15,15 +15,18 @@ DEFAULTS_NAME="completeEnrolment"
 # If you change DEFAULTS_NAME, make sure the domain in the config profiles matches, or it won't work
 DEFAULTS_PLIST="$DEFAULTS_NAME.plist"
 LIB="/Library"
+OUTSET="/usr/local/outset"
 DEFAULTS_FILE="$LIB/Managed Preferences/$DEFAULTS_PLIST"
-LOGIN_PLIST="$LIB/LaunchAgents/$DEFAULTS_PLIST"
-STARTUP_PLIST="$LIB/LaunchDaemons/$DEFAULTS_PLIST"
+LOGINW_SCRIPT="$OUTSET/loginwindow/$DEFAULTS_NAME"
+LOGINU_SCRIPT="$OUTSET/login-every/$DEFAULTS_NAME"
+STARTUP_SCRIPT="$OUTSET/boot-every/$DEFAULTS_NAME"
 SETTINGS_PLIST="$LIB/Preferences/$DEFAULTS_PLIST"
 CACHE="$LIB/Caches/completeEnrolment"
 mkdir -p "$CACHE"
 CLEANUP_FILES=( "$C_ENROLMENT" )
-CLEANUP_FILES+=( "$LOGIN_PLIST" )
-CLEANUP_FILES+=( "$STARTUP_PLIST" )
+CLEANUP_FILES+=( "$LOGINW_SCRIPT" )
+CLEANUP_FILES+=( "$LOGINU_SCRIPT" )
+CLEANUP_FILES+=( "$STARTUP_SCRIPT" )
 CLEANUP_FILES+=( "$SETTINGS_PLIST" )
 CLEANUP_FILES+=( "$CACHE" )
 JAMF_URL="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist jss_url )"
@@ -107,33 +110,35 @@ runIt() {
 }
 
 track() {
+ local THE_STRING="$( echo "$3" | tr -d '"' )"
  case $1 in
   bool|integer|string)
-   logIt "Updating $2 of type $1 to: $3"
-   eval "plutil -replace $2 -$1 '$3' '$TRACKER_JSON'"
+   logIt "Updating $2 of type $1 to: $THE_STRING"
+   eval "plutil -replace $2 -$1 \"$THE_STRING\" '$TRACKER_JSON'"
    if [ -e "$TRACKER_RUNNING" ]; then
-    echo "$2: $3" >> "$TRACKER_COMMAND"
+    echo "$2: $THE_STRING" >> "$TRACKER_COMMAND"
     sleep 0.1
    fi
   ;;
   new)
-   logIt "Adding task: $2"
-   eval "plutil -insert listitem -json '{\"title\":\"$2\"}' -append '$TRACKER_JSON'"
+   THE_STRING="$( echo "$2" | tr -d '"' )"
+   logIt "Adding task: $THE_STRING"
+   eval "plutil -insert listitem -json \"{\\\"title\\\":\\\"$THE_STRING\\\"}\" -append '$TRACKER_JSON'"
    if [ -e "$TRACKER_RUNNING" ]; then
-    echo "listitem: add, title: $2" >> "$TRACKER_COMMAND"
+    echo "listitem: add, title: $THE_STRING" >> "$TRACKER_COMMAND"
     sleep 0.1
    fi
    TRACKER_ITEM=${$( jq 'currentitem' ):--1}
    ((TRACKER_ITEM++))
    track integer currentitem $TRACKER_ITEM
-   logIt "Added task #$TRACKER_ITEM: $2"
+   logIt "Added task #$TRACKER_ITEM: $THE_STRING"
   ;;
   update)
    TRACKER_ITEM=${$( jq 'currentitem' ):-0}
-   logIt "Updating $2 of task #$TRACKER_ITEM \"$( jq 'listitem[.currentitem].title' )\" to: $3"
-   eval "plutil -replace listitem.$TRACKER_ITEM.$2 -string '$3' '$TRACKER_JSON'"
+   logIt "Updating $2 of task #$TRACKER_ITEM \"$( jq 'listitem[.currentitem].title' )\" to: $THE_STRING"
+   eval "plutil -replace listitem.$TRACKER_ITEM.$2 -string \"$THE_STRING\" '$TRACKER_JSON'"
    if [ -e "$TRACKER_RUNNING" ]; then
-    echo "listitem: index: $TRACKER_ITEM, $2: $3" >> "$TRACKER_COMMAND"
+    echo "listitem: index: $TRACKER_ITEM, $2: $THE_STRING" >> "$TRACKER_COMMAND"
     sleep 0.1
    fi
   ;;
@@ -234,7 +239,7 @@ trackIt() {
 repeatIt() {
  COUNTDOWN=1
  until [ $COUNTDOWN -eq 6 ] || trackIt "$1" "$2" "$3" "$4"; do
-  sleep 1
+  sleep 5
   ((COUNTDOWN++))
  done
  if [ $COUNTDOWN -eq 6 ]; then
@@ -360,7 +365,7 @@ case $1 in
    command "/usr/sbin/systemsetup -setnetworktimeserver $SYSTEM_TIME_SERVER" \
    result
   sleep 5
-  trackNow "Sync'ing the Time with $SYSTEM_TIME_SERVER" \
+  trackNow "Synchronising the Time with '$SYSTEM_TIME_SERVER'" \
    command "/usr/bin/sntp -Ss $SYSTEM_TIME_SERVER" \
    result
   sleep 5
@@ -390,12 +395,7 @@ case $1 in
   trackNow "Installing swiftDialog (the software generating this window) with Installomator" \
    install dialog \
    file "$C_DIALOG"
-    
-  # start setting up dialog plist
-  defaults write "$LOGIN_PLIST" Label "$DEFAULTS_NAME.loginwindow"
-  defaults write "$LOGIN_PLIST" RunAtLoad -bool TRUE
-  chmod ugo+r "$LOGIN_PLIST"
-
+  
   # Executed by Jamf Pro
   # Load config profile settings and save them for later use in a more secure location, do the same
   # for supplied options such as passwords, only attempt to store them in the Keychain (such as
@@ -410,18 +410,32 @@ case $1 in
     # Secure Token, without which so many things will break.
     
     # Setup Login Window
-    defaults write "$LOGIN_PLIST" LimitLoadToSessionType -array "LoginWindow"
-    defaults write "$LOGIN_PLIST" ProgramArguments -array "$C_ENROLMENT" "startTrackerDialog" "-restart"
+    mkdir -p "$( dirname "$LOGINW_SCRIPT" )"
+    echo '!#/bin/zsh -f' > "$LOGINW_SCRIPT"
+    echo "\"$C_ENROLMENT\" startTrackerDialog -restart" >> "$LOGINW_SCRIPT"
+    chmod 755 "$LOGINW_SCRIPT"
     
+    # Preparing the Login window
+    # These settings fix a quirk with automated where the login window instead of having a
+    # background, ends up displaying a grey background these two settings apparently repait that.
+    runIt "/usr/bin/defaults write /Library/Preferences/com.apple.loginwindow.plist AdminHostInfo -string HostName"
+    runIt "/usr/bin/defaults write /Library/Preferences/com.apple.loginwindow.plist SHOWFULLNAME -bool true"
+
     # Make sure loginwindow is running
     while [ "$( pgrep -lu "root" "loginwindow" )" = "" ]; do
      sleep 1
     done
+    
+    # Restart the login window
+    runIt "/usr/bin/defaults write /Library/Preferences/com.apple.loginwindow.plist LoginwindowText 'Enrolled at $( /usr/bin/profiles status -type enrollment | /usr/bin/grep server | /usr/bin/awk -F '[:/]' '{ print $5 }' )\nThis computer will restart shortly,\nplease wait while initial configuration in performed...'"
+    sleep 5
+    runIt "/usr/bin/pkill loginwindow"
+
 
     # Start Dialog
     trackNow "Starting swiftDialog" \
-     command "launchctl load -S LoginWindow '$LOGIN_PLIST'" \
-     file "$TRACKER_RUNNING"
+     install "outset" \
+     file "/usr/local/outset/outset"
     MKUSER_OPTIONS=""
    ;|
    ^_mbsetupuser)
@@ -432,8 +446,8 @@ case $1 in
     "$C_DIALOG"
     
     #
-    defaults write "$LOGIN_PLIST" ProgramArguments -array "$C_ENROLMENT" "startTrackerDialog"
-    launchctl load "$LOGIN_PLIST"
+    "$C_ENROLMENT" "startTrackerDialog" &
+    
     MKUSER_OPTIONS="--secure-token-admin-account-name '$loggedinusername' --secure-token-admin-password '$loggedinpassword'"
    ;|
    *)
@@ -469,10 +483,9 @@ case $1 in
    ;|
    _mbsetupuser)
     # restart by sending quit message to dialog
-    defaults write "$STARTUP_PLIST" Label "$DEFAULTS_NAME.startup"
-    defaults write "$STARTUP_PLIST" RunAtLoad -bool TRUE
-    defaults write "$STARTUP_PLIST" ProgramArguments -array "$C_ENROLMENT" "process"
-    chmod ugo+r "$STARTUP_PLIST"
+    echo '!#/bin/zsh -f' > "$STARTUP_SCRIPT"
+    echo "\"$C_ENROLMENT\" process" >> "$STARTUP_SCRIPT"
+    chmod 755 "$STARTUP_SCRIPT"
     trackNow "Restarting for Application Installation" \
      command 'echo "quit:" >> "$TRACKER_COMMAND"' \
      result
@@ -495,22 +508,28 @@ case $1 in
    echo > "$TRACKER_COMMAND" # Must not start a dialog with anything in it
    if $TRACKER; then
     touch "$TRACKER_RUNNING"
+    logIt "Starting Progress Dialog..."
     "$C_DIALOG" --loginwindow --jsonfile "$TRACKER_JSON" --button1text "Show Log..."
     rm -f "$TRACKER_RUNNING"
     TRACKER=false
    else
+    logIt "Starting Log view Dialog..."
     "$C_DIALOG" --loginwindow --jsonfile "$LOG_JSON" --button1text "Show Progress..."
     TRACKER=true
    fi
+   
   done
   if [ "$2" = "-restart" ]; then
-   defaults delete "$LOGIN_PLIST" LimitLoadToSessionType
-   defaults write "$LOGIN_PLIST" ProgramArguments -array "$C_ENROLMENT" "startTrackerDialog"
+   mv "$LOGINW_SCRIPT" "$LOGINU_SCRIPT"
+   echo '!#/bin/zsh -f' > "$LOGINU_SCRIPT"
+   echo "\"$C_ENROLMENT\" startTrackerDialog" >> "$LOGINU_SCRIPT"
    "$C_DIALOG" --loginwindow --title "Welcome to ${"$( defaultRead corpName )":-"The Service Desk"}" --message "Restarting for Application Installation." --timer 60 --position bottom --button1text "Restart Now..."
    shutdown -r now
   fi
  ;;
  process)
+  # clear the LoginwindowText
+  runIt "/usr/bin/defaults delete /Library/Preferences/com.apple.loginwindow.plist LoginwindowText"
   # update LOG_JSON to identify and follow the correct log file.
   plutil -replace displaylog -string "$LOG_FILE" "$LOG_JSON"
   track string message "Please wait while this computer is set up...<br>Log File available at: $LOG_FILE"
@@ -696,11 +715,11 @@ case $1 in
    done
   fi
   # trigger cleanup
-  defaults write "$STARTUP_PLIST" ProgramArguments -array "$C_ENROLMENT" "cleanUp"
+  echo '!#/bin/zsh -f' > "$STARTUP_SCRIPT"
+  echo "\"$C_ENROLMENT\" cleanup" >> "$STARTUP_SCRIPT"
  ;;
  cleanUp)
   # A clean up routine
-  
   logIt "Removing: $CLEANUP_FILES"
   eval "rm -rf $CLEANUP_FILES"
  ;;
