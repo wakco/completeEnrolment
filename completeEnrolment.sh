@@ -6,6 +6,7 @@
 C_JAMF="/usr/local/bin/jamf"
 C_INSTALL="/usr/local/Installomator/Installomator.sh"
 C_DIALOG="/usr/local/bin/dialog"
+# C_DIALOG="/Library/Application Support/Dialog/Dialog.app/Contents/MacOS/Dialog"
 C_MKUSER="/usr/local/bin/mkuser"
 C_ENROLMENT="/usr/local/bin/completeEnrolment"
 
@@ -17,17 +18,21 @@ DEFAULTS_PLIST="$DEFAULTS_NAME.plist"
 LIB="/Library"
 OUTSET="/usr/local/outset"
 DEFAULTS_FILE="$LIB/Managed Preferences/$DEFAULTS_PLIST"
-LOGINW_SCRIPT="$OUTSET/loginwindow/$DEFAULTS_NAME"
-LOGINU_SCRIPT="$OUTSET/login-every/$DEFAULTS_NAME"
-STARTUP_SCRIPT="$OUTSET/boot-every/$DEFAULTS_NAME"
-SETTINGS_PLIST="$LIB/Preferences/$DEFAULTS_PLIST"
+CLEANUP_FILES=( "$C_ENROLMENT" )
+# LOGINW_SCRIPT="$OUTSET/loginwindow/$DEFAULTS_NAME"
+# CLEANUP_FILES+=( "$LOGINW_SCRIPT" )
+# LOGINU_SCRIPT="$OUTSET/login-every/$DEFAULTS_NAME"
+# CLEANUP_FILES+=( "$LOGINU_SCRIPT" )
+# STARTUP_SCRIPT="$OUTSET/boot-every/$DEFAULTS_NAME"
+# CLEANUP_FILES+=( "$STARTUP_SCRIPT" )
+LOGIN_PLIST="$LIB/LaunchAgents/$DEFAULTS_PLIST"
+CLEANUP_FILES+=( "$LOGIN_PLIST" )
+STARTUP_PLIST="$LIB/LaunchDaemons/$DEFAULTS_PLIST"
+CLEANUP_FILES+=( "$STARTUP_PLIST" )
+SETTINGS_PLIST="/private/var/root$LIB/Preferences/$DEFAULTS_PLIST"
+CLEANUP_FILES+=( "$SETTINGS_PLIST" )
 CACHE="$LIB/Caches/completeEnrolment"
 mkdir -p "$CACHE"
-CLEANUP_FILES=( "$C_ENROLMENT" )
-CLEANUP_FILES+=( "$LOGINW_SCRIPT" )
-CLEANUP_FILES+=( "$LOGINU_SCRIPT" )
-CLEANUP_FILES+=( "$STARTUP_SCRIPT" )
-CLEANUP_FILES+=( "$SETTINGS_PLIST" )
 CLEANUP_FILES+=( "$CACHE" )
 JAMF_URL="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist jss_url )"
 JAMF_SERVER="$( echo "$JAMF_URL" | awk -F '(/|:)' '{ print $4 }' )"
@@ -88,6 +93,14 @@ logIt "###################### completeEnrolment started with $1."
 
 defaultRead() {
  defaults read "$DEFAULTS_FILE" "$1" 2>/dev/null
+}
+
+defaultReadBool() {
+ if [ "$( defaultRead $1 )" = "1" ]; then
+  echo "true"
+ else
+  echo "false"
+ fi
 }
 
 listRead() {
@@ -173,7 +186,7 @@ trackIt() {
    runIt "$C_JAMF policy -event $2"
   ;;
   install)
-   runIt "$C_INSTALL $2 NOTIFY=silent $GITHUB_API"
+   runIt "$C_INSTALL $2 NOTIFY=silent $GITHUBAPI"
   ;;
   selfService)
    runIt "open -j -a '$SELF_SERVICE' -u '$2'"
@@ -291,9 +304,13 @@ TRACKER_COMMAND="/tmp/completeEnrolment.DIALOG_COMMANDS.log"
 TRACKER_JSON="/private/var/root/completeEnrolment-tracker.json"
 LOG_JSON="/private/var/root/completeEnrolment-log.json"
 TRACKER_RUNNING="/tmp/completeEnrolment.DIALOG.run"
-touch "$TRACKER_COMMAND" "$TRACKER_JSON"
+touch "$TRACKER_COMMAND" "$TRACKER_JSON" "$LOG_JSON"
 CLEANUP_FILES+=( "$TRACKER_JSON" )
+CLEANUP_FILES+=( "$LOG_JSON" )
 TEMP_ADMIN="${"$( defaultRead tempAdmin )":-"setup_admin"}"
+TEMP_NAME="${"$( defaultRead tempName )":-"Setup Admin"}"
+LAPS_ADMIN="${"$( defaultRead lapsAdmin )":-"laps_admin"}"
+LAPS_NAME="${"$( defaultRead lapsName )":-"LAPS Admin"}"
 
 # And start processing
 
@@ -311,25 +328,23 @@ case $1 in
    GITHUBAPI=" GITHUBAPI=$( echo "$4" | base64 -d )"
    settingsPlist write github -string "$4"
   fi
-  TEMP_NAME="${"$( defaultRead tempName )":-"Setup Admin"}"
   if [ "$5" = "" ]; then
-   TEMP_PASS="setup"
+   TEMP_PASS="$( echo "setup" | base64 )"
   else
-   TEMP_PASS="$( echo "$5" | base64 -d )"
+   TEMP_PASS="$5"
   fi
-  settingsPlist write temp -string "$( echo "$TEMP_PASS" | base64 )"
+  settingsPlist write temp -string "$TEMP_PASS"
   if [ "$6" = "" ]; then
    LAPS_PASS="$TEMP_PASS"
   else
-   LAPS_PASS="$( echo "$6" | base64 -d )"
+   LAPS_PASS="$6"
   fi
-  settingsPlist write laps -string "$( echo "$LAPS_PASS" | base64 )"
+  settingsPlist write laps -string "$LAPS_PASS"
   if [ "$7" = "" ] || [ "$8" = "" ]; then
-   logAndExit 4 "API details are required for access to the \$JAMF_ADMIN password, the following was supplied:\nAPI ID: $7\nAPI Secret: $8"
+   logIt "API details are required for access to the \$JAMF_ADMIN password, the following was supplied:\nAPI ID: $7\nAPI Secret: $8"
+   exit 1
   else
-   API_ID="$( echo "$7" | base64 -d )"
    settingsPlist write apiId -string "$7"
-   API_SECRET="$( echo "$8" | base64 -d )"
    settingsPlist write apiSecret -string "$8"
   fi
   EMAIL_PASS="${9:-""}"
@@ -410,30 +425,44 @@ case $1 in
     # Secure Token, without which so many things will break.
     
     # Setup Login Window
-    mkdir -p "$( dirname "$LOGINW_SCRIPT" )"
-    echo '!#/bin/zsh -f' > "$LOGINW_SCRIPT"
-    echo "\"$C_ENROLMENT\" startTrackerDialog -restart" >> "$LOGINW_SCRIPT"
-    chmod 755 "$LOGINW_SCRIPT"
+#    mkdir -p "$( dirname "$LOGINW_SCRIPT" )"
+#    echo '!#/bin/zsh -f' > "$LOGINW_SCRIPT"
+#    echo "\"$C_ENROLMENT\" startTrackerDialog -restart" >> "$LOGINW_SCRIPT"
+#    chmod 755 "$LOGINW_SCRIPT"
+    runIt "defaults write '$LOGIN_PLIST' Label '$DEFAULTS_NAME'"
+    runIt "defaults write '$LOGIN_PLIST' RunAtLoad -bool TRUE"
+    runIt "defaults write '$LOGIN_PLIST' ProgramArguments -array '$C_ENROLMENT' 'startTrackerDialog'"
+    runIt "defaults write '$LOGIN_PLIST' LimitLoadToSessionType -array 'LoginWindow'"
+    chmod go+r "$LOGIN_PLIST"
     
     # Preparing the Login window
     # These settings fix a quirk with automated where the login window instead of having a
     # background, ends up displaying a grey background these two settings apparently repait that.
-    runIt "/usr/bin/defaults write /Library/Preferences/com.apple.loginwindow.plist AdminHostInfo -string HostName"
-    runIt "/usr/bin/defaults write /Library/Preferences/com.apple.loginwindow.plist SHOWFULLNAME -bool true"
+    runIt "defaults write $LIB/Preferences/com.apple.loginwindow.plist AdminHostInfo -string HostName"
+    runIt "defaults write $LIB/Preferences/com.apple.loginwindow.plist SHOWFULLNAME -bool true"
 
     # Make sure loginwindow is running
     while [ "$( pgrep -lu "root" "loginwindow" )" = "" ]; do
      sleep 1
     done
-    
+        
     # Restart the login window
     runIt "/usr/bin/defaults write /Library/Preferences/com.apple.loginwindow.plist LoginwindowText 'Enrolled at $( /usr/bin/profiles status -type enrollment | /usr/bin/grep server | /usr/bin/awk -F '[:/]' '{ print $5 }' )\nThis computer will restart shortly,\nplease wait while initial configuration in performed...'"
     sleep 5
     runIt "/usr/bin/pkill loginwindow"
-
-
+    
+    # And wait for it to be ready
+    while [ "$( /usr/libexec/PlistBuddy -c "print :IOConsoleUsers:0:kCGSSessionSecureInputPID" /dev/stdin 2>/dev/null <<< "$(ioreg -n Root -d1 -a)" )" = "" ]; do
+     sleep 0.2
+    done
+    
     # Start Dialog
     trackNow "Starting swiftDialog" \
+     command "launchctl load -S LoginWindow '$LOGIN_PLIST'" \
+     file "$TRACKER_RUNNING"
+    
+    # Install outset
+    trackNow "Installing outset" \
      install "outset" \
      file "/usr/local/outset/outset"
     MKUSER_OPTIONS=""
@@ -471,8 +500,8 @@ case $1 in
     
     # Add complete setup
     trackNow "Creating Complete Setup Account" \
-     secure "'$C_MKUSER' --username completesetup --password setup --real-name 'Complete Setup' --home /Users/completesetup --hidden userOnly --skip-setup-assistant firstLoginOnly --automatic-login --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes $MKUSER_OPTIONS" "Creating username completesetup" \
-     file "/Users/completesetup"
+     secure "'$C_MKUSER' --username '$TEMP_ADMIN' --password '$( settingsPlist read temp | base64 -d )' --real-name '$TEMP_NAME' --home /Users/$TEMP_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --automatic-login --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes $MKUSER_OPTIONS" "Creating username $TEMP_ADMIN" \
+     file "/Users/$TEMP_ADMIN"
     
     # set computername
     INSTALL_POLICY="${"$( defaultRead policyComputerName )":-"fixComputerName"}"
@@ -483,9 +512,15 @@ case $1 in
    ;|
    _mbsetupuser)
     # restart by sending quit message to dialog
-    echo '!#/bin/zsh -f' > "$STARTUP_SCRIPT"
-    echo "\"$C_ENROLMENT\" process" >> "$STARTUP_SCRIPT"
-    chmod 755 "$STARTUP_SCRIPT"
+#    echo '!#/bin/zsh -f' > "$STARTUP_SCRIPT"
+#    echo "\"$C_ENROLMENT\" process" >> "$STARTUP_SCRIPT"
+#    chmod 755 "$STARTUP_SCRIPT"
+    runIt "defaults write '$STARTUP_PLIST' Label '$DEFAULTS_NAME'"
+    runIt "defaults write '$STARTUP_PLIST' RunAtLoad -bool TRUE"
+    runIt "defaults write '$STARTUP_PLIST' ProgramArguments -array '$C_ENROLMENT' 'process'"
+    runIt "defaults delete '$LOGIN_PLIST' LimitLoadToSessionType"
+    chmod go+r "$STARTUP_PLIST"
+
     trackNow "Restarting for Application Installation" \
      command 'echo "quit:" >> "$TRACKER_COMMAND"' \
      result
@@ -497,15 +532,12 @@ case $1 in
   esac
   unsetopt extended_glob
  ;;
- *)
-  # load saved settings
- ;|
  startTrackerDialog)
   # to open the event tracking dialog
   TRACKER=true
-  echo > "$TRACKER_COMMAND" # Must not start the loop with anything in it
+  echo > "$TRACKER_COMMAND" # Should not start the loop with anything in it
   until [[ "$( tail -n1 "$TRACKER_COMMAND" )" = "quit:" ]]; do
-   echo > "$TRACKER_COMMAND" # Must not start a dialog with anything in it
+   echo > "$TRACKER_COMMAND" # Should not start a dialog with anything in it
    if $TRACKER; then
     touch "$TRACKER_RUNNING"
     logIt "Starting Progress Dialog..."
@@ -520,13 +552,21 @@ case $1 in
    
   done
   if [ "$2" = "-restart" ]; then
-   mv "$LOGINW_SCRIPT" "$LOGINU_SCRIPT"
-   echo '!#/bin/zsh -f' > "$LOGINU_SCRIPT"
-   echo "\"$C_ENROLMENT\" startTrackerDialog" >> "$LOGINU_SCRIPT"
+#   mv "$LOGINW_SCRIPT" "$LOGINU_SCRIPT"
+#   echo '!#/bin/zsh -f' > "$LOGINU_SCRIPT"
+#   echo "\"$C_ENROLMENT\" process" >> "$LOGINU_SCRIPT"
    "$C_DIALOG" --loginwindow --title "Welcome to ${"$( defaultRead corpName )":-"The Service Desk"}" --message "Restarting for Application Installation." --timer 60 --position bottom --button1text "Restart Now..."
    shutdown -r now
   fi
  ;;
+ *)
+  # load saved settings
+  if [ "$( settingsPlist read )" = "" ]; then
+   GITHUBAPI=""
+  else
+   GITHUBAPI=" GITHUBAPI=$( readSaved github )"
+  fi
+ ;|
  process)
   # clear the LoginwindowText
   runIt "/usr/bin/defaults delete /Library/Preferences/com.apple.loginwindow.plist LoginwindowText"
@@ -537,13 +577,55 @@ case $1 in
 
   # finishing setting up admin accounts
   # Add JSS ADMIN
-  trackNow "Creating $JSS_NAME Account" \
-  secure "'$C_MKUSER' --username $JSS_ADMIN --password '$DEFAULT_PASS' --real-name '$JSS_NAME' --home /private/var/$JSS_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes " "Creating username completesetup" \
-   file "/private/var/$JSS_ADMIN"
-  # Add LAPS ADMIN
-  trackNow "Creating $LAPS_NAME Account" \
-   secure "'$C_MKUSER' --username $LAPS_ADMIN --password '$DEFAULT_PASS' --real-name '$LAPS_NAME' --home /private/var/$LAPS_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes " "Creating username completesetup" \
-   file "/private/var/$LAPS_ADMIN"
+  # This will load the $JAMF_ADMIN and $JAMF_PASS login details
+  JAMF_AUTH_TOKEN="$( echo "$( curl -s --location --request POST "${JAMF_URL}api/oauth/token" \
+   --header 'Content-Type: application/x-www-form-urlencoded' \
+   --data-urlencode "client_id=$( readSaved apiId )" \
+   --data-urlencode 'grant_type=client_credentials' \
+   --data-urlencode "client_secret=$( readSaved apiSecret )" )" | /usr/bin/jq -Mr ".access_token" )"
+  if [[ "$JAMF_AUTH_TOKEN" = *httpStatus* ]]; then
+   logIt "This should not have happened, are the API ID/Secret details correct?\nResponse from $JAMF_URL:\n$JAMF_AUTH_TOKEN"
+   exit 1
+  fi
+  sleep 1
+
+  JAMF_ACCOUNTS="$( curl -s "${JAMF_URL}api/v2/local-admin-password/$( defaultRead managementID )/accounts" \
+   -H "accept: application/json" -H "Authorization: Bearer $JAMF_AUTH_TOKEN" )"
+  logIt "checking for JMF account in:\n$JAMF_ACCOUNTS\n"
+  for (( i = 0; i < $( readJSON "$JAMF_ACCOUNTS" "totalCount" ); i++ )); do
+   if [ "$( readJSON "$JAMF_ACCOUNTS" "results[$i].userSource" )" = "JMF" ]; then
+    JAMF_ADMIN="$( readJSON "$JAMF_ACCOUNTS" "results[$i].username" )"
+    JAMF_GUID="$( readJSON "$JAMF_ACCOUNTS" "results[$i].guid" )"
+    break
+   fi
+  done
+  if [ -z "$JAMF_ADMIN" ] || [ -z "$JAMF_GUID" ]; then
+   logIt "this should not have happened, unable to get Jamf Managed Account Details:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
+   exit 1
+  fi
+  sleep 1
+
+  JAMF_PASS="$( readJSON "$( curl -s "${JAMF_URL}api/v2/local-admin-password/$( defaultRead managementID )/account/$JAMF_ADMIN/$JAMF_GUID/password" \
+   -H "accept: application/json" -H "Authorization: Bearer $JAMF_AUTH_TOKEN" )" "password" )"
+  if [ -z "$JAMF_PASS" ]; then
+   logIt "this should not have happened, unable to get Jamf Managed Account Password:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
+   exit 1
+  fi
+
+  trackNow "Creating $JAMF_ADMIN Account" \
+  secure "'$C_MKUSER' --username $JAMF_ADMIN --password '$JAMF_PASS' --real-name '$JAMF_ADMIN Account' --home /private/var/$JAMF_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes -adminUser '$TEMP_ADMIN' -adminPassword '$( readSaved temp )'" "Creating username $JAMF_ADMIN" \
+   file "/private/var/$JAMF_ADMIN"
+  # Add or update LAPS ADMIN
+  if [ -e "/Users/$LAPS_ADMIN" ]; then
+   trackNow "Securing $LAPS_NAME Account" \
+    secure "dscl . change '/Users/$LAPS_ADMIN' NFSHomeDirectory '/Users/$LAPS_ADMIN' '/private/var/$LAPS_ADMIN' ; mv '/Users/$LAPS_ADMIN' '/private/var/$LAPS_ADMIN' ; sysadminctl -secureTokenOn '"$LAPS_ADMIN"' -password '$( readSaved laps )' -adminUser '$TEMP_ADMIN' -adminPassword '$( readSaved temp )'" "Moving and securing $LAPS_ADMIN"\
+    result
+
+  else
+   trackNow "Creating $LAPS_NAME Account" \
+    secure "'$C_MKUSER' --username $LAPS_ADMIN --password '$( readSaved laps )' --real-name '$LAPS_NAME' --home /private/var/$LAPS_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes -adminUser '$TEMP_ADMIN' -adminPassword '$( readSaved temp )'" "Creating username $LAPS_ADMIN" \
+    file "/private/var/$LAPS_ADMIN"
+  fi
  
   if [ "$( defaults read "$DEFAULTS_FILE" installs 2>/dev/null )" != "" ]; then
    
@@ -715,11 +797,20 @@ case $1 in
    done
   fi
   # trigger cleanup
-  echo '!#/bin/zsh -f' > "$STARTUP_SCRIPT"
-  echo "\"$C_ENROLMENT\" cleanup" >> "$STARTUP_SCRIPT"
+#  rm -rf "$LOGINW_SCRIPT" "$LOGINU_SCRIPT"
+#  mkdir -p "$( dirname "$STARTUP_SCRIPT" )"
+#  echo '!#/bin/zsh -f' > "$STARTUP_SCRIPT"
+#  echo "\"$C_ENROLMENT\" cleanUp" >> "$STARTUP_SCRIPT"
+#  chmod 755 "$STARTUP_SCRIPT"
+  runIt "defaults write '$STARTUP_PLIST' ProgramArguments -array '$C_ENROLMENT' 'cleanUp'"
  ;;
  cleanUp)
   # A clean up routine
+  if ${$( defaultReadBool tempKeep ):-false}; then
+   TEMP_ADMIN="${"$( defaultRead tempAdmin )":-"setup_admin"}"
+   logIt "Removing $TEMP_ADMIN as no longer required."
+   sysadminctl -deleteUser "$TEMP_ADMIN" -adminUser "$TEMP_ADMIN" -adminPassword "$( readSaved laps )" >> "$LOG_FILE" 2>&1
+  fi
   logIt "Removing: $CLEANUP_FILES"
   eval "rm -rf $CLEANUP_FILES"
  ;;
