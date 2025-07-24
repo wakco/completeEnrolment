@@ -5,8 +5,7 @@
 
 C_JAMF="/usr/local/bin/jamf"
 C_INSTALL="/usr/local/Installomator/Installomator.sh"
-C_DIALOG="/usr/local/bin/dialog"
-# C_DIALOG="/Library/Application Support/Dialog/Dialog.app/Contents/MacOS/Dialog"
+C_DIALOG="/Library/Application Support/Dialog/Dialog.app/Contents/MacOS/Dialog"
 C_MKUSER="/usr/local/bin/mkuser"
 C_ENROLMENT="/usr/local/bin/completeEnrolment"
 
@@ -16,20 +15,12 @@ DEFAULTS_NAME="completeEnrolment"
 # If you change DEFAULTS_NAME, make sure the domain in the config profiles matches, or it won't work
 DEFAULTS_PLIST="$DEFAULTS_NAME.plist"
 LIB="/Library"
-OUTSET="/usr/local/outset"
+PREFS="/private/var/root$LIB/Preferences"
 DEFAULTS_FILE="$LIB/Managed Preferences/$DEFAULTS_PLIST"
 CLEANUP_FILES=( "$C_ENROLMENT" )
-# LOGINW_SCRIPT="$OUTSET/loginwindow/$DEFAULTS_NAME"
-# CLEANUP_FILES+=( "$LOGINW_SCRIPT" )
-# LOGINU_SCRIPT="$OUTSET/login-every/$DEFAULTS_NAME"
-# CLEANUP_FILES+=( "$LOGINU_SCRIPT" )
-# STARTUP_SCRIPT="$OUTSET/boot-every/$DEFAULTS_NAME"
-# CLEANUP_FILES+=( "$STARTUP_SCRIPT" )
-LOGIN_PLIST="$LIB/LaunchAgents/$DEFAULTS_PLIST"
-CLEANUP_FILES+=( "$LOGIN_PLIST" )
 STARTUP_PLIST="$LIB/LaunchDaemons/$DEFAULTS_PLIST"
 CLEANUP_FILES+=( "$STARTUP_PLIST" )
-SETTINGS_PLIST="/private/var/root$LIB/Preferences/$DEFAULTS_PLIST"
+SETTINGS_PLIST="$PREFS/$DEFAULTS_PLIST"
 CLEANUP_FILES+=( "$SETTINGS_PLIST" )
 CACHE="$LIB/Caches/completeEnrolment"
 mkdir -p "$CACHE"
@@ -185,11 +176,14 @@ trackIt() {
   policy)
    runIt "$C_JAMF policy -event $2"
   ;;
+  policyid)
+   runIt "$C_JAMF policy -id $2"
+  ;;
   install)
    runIt "$C_INSTALL $2 NOTIFY=silent $GITHUBAPI"
   ;;
   selfService)
-   runIt "open -j -a '$SELF_SERVICE' -u '$2'"
+   runIt "launchctl asuser $( id -u $WHO_LOGGED ) open -j -a '$SELF_SERVICE' -u '$2'"
   ;;
  esac
  THE_RESULT=$?
@@ -206,12 +200,12 @@ trackIt() {
   ;;
   *)
    track update statustext "Confirming..."
+   THE_TEST=false
   ;|
   appstore)
    THE_TEST="CHECKAPP=\"\$( spctl -a -vv '$$4' 2>&1 )\" && [[ \"\$CHECKAPP\" = *'Mac App Store'* ]]"
   ;|
   teamid)
-   THE_TEST=false
    if CHECKAPP="$( spctl -a -vv '$$4' 2>&1 )"; then
     if [[ "$CHECKAPP" = *"($5)"* ]]; then
      THE_TEST=true
@@ -301,8 +295,8 @@ if [ "$ADMIN_ICON" != "--no-picture" ]; then
  ADMIN_ICON="--picture $ADMIN_ICON"
 fi
 TRACKER_COMMAND="/tmp/completeEnrolment.DIALOG_COMMANDS.log"
-TRACKER_JSON="/private/var/root/completeEnrolment-tracker.json"
-LOG_JSON="/private/var/root/completeEnrolment-log.json"
+TRACKER_JSON="$PREFS/completeEnrolment-tracker.json"
+LOG_JSON="$PREFS/completeEnrolment-log.json"
 TRACKER_RUNNING="/tmp/completeEnrolment.DIALOG.run"
 touch "$TRACKER_COMMAND" "$TRACKER_JSON" "$LOG_JSON"
 CLEANUP_FILES+=( "$TRACKER_JSON" )
@@ -342,6 +336,9 @@ case $1 in
   settingsPlist write laps -string "$LAPS_PASS"
   if [ "$7" = "" ] || [ "$8" = "" ]; then
    logIt "API details are required for access to the \$JAMF_ADMIN password, the following was supplied:\nAPI ID: $7\nAPI Secret: $8"
+   if [ "$WHO_LOGGED" != "_mbsetupuser" ]; then
+    "$C_DIALOG" --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: missing Jamf Pro API login details"
+   fi
    exit 1
   else
    settingsPlist write apiId -string "$7"
@@ -423,48 +420,22 @@ case $1 in
     # Get setup quickly and start atLoginWindow for initial step tracking followed by a restart.
     # This includes creating a temporary admin account with automatic login status to get the first
     # Secure Token, without which so many things will break.
-    
-    # Setup Login Window
-#    mkdir -p "$( dirname "$LOGINW_SCRIPT" )"
-#    echo '!#/bin/zsh -f' > "$LOGINW_SCRIPT"
-#    echo "\"$C_ENROLMENT\" startTrackerDialog -restart" >> "$LOGINW_SCRIPT"
-#    chmod 755 "$LOGINW_SCRIPT"
-    runIt "defaults write '$LOGIN_PLIST' Label '$DEFAULTS_NAME'"
-    runIt "defaults write '$LOGIN_PLIST' RunAtLoad -bool TRUE"
-    runIt "defaults write '$LOGIN_PLIST' ProgramArguments -array '$C_ENROLMENT' 'startTrackerDialog'"
-    runIt "defaults write '$LOGIN_PLIST' LimitLoadToSessionType -array 'LoginWindow'"
-    chmod go+r "$LOGIN_PLIST"
-    
+        
     # Preparing the Login window
     # These settings fix a quirk with automated where the login window instead of having a
     # background, ends up displaying a grey background these two settings apparently repait that.
     runIt "defaults write $LIB/Preferences/com.apple.loginwindow.plist AdminHostInfo -string HostName"
     runIt "defaults write $LIB/Preferences/com.apple.loginwindow.plist SHOWFULLNAME -bool true"
-
-    # Make sure loginwindow is running
-    while [ "$( pgrep -lu "root" "loginwindow" )" = "" ]; do
-     sleep 1
-    done
         
     # Restart the login window
     runIt "/usr/bin/defaults write /Library/Preferences/com.apple.loginwindow.plist LoginwindowText 'Enrolled at $( /usr/bin/profiles status -type enrollment | /usr/bin/grep server | /usr/bin/awk -F '[:/]' '{ print $5 }' )\nThis computer will restart shortly,\nplease wait while initial configuration in performed...'"
     sleep 5
-    runIt "/usr/bin/pkill loginwindow"
     
-    # And wait for it to be ready
-    while [ "$( /usr/libexec/PlistBuddy -c "print :IOConsoleUsers:0:kCGSSessionSecureInputPID" /dev/stdin 2>/dev/null <<< "$(ioreg -n Root -d1 -a)" )" = "" ]; do
-     sleep 0.2
-    done
+    # only kill the login window if it is already running
+    if [ "$( pgrep -lu "root" "loginwindow" )" != "" ]; then
+     runIt "pkill loginwindow"
+    fi
     
-    # Start Dialog
-    trackNow "Starting swiftDialog" \
-     command "launchctl load -S LoginWindow '$LOGIN_PLIST'" \
-     file "$TRACKER_RUNNING"
-    
-    # Install outset
-    trackNow "Installing outset" \
-     install "outset" \
-     file "/usr/local/outset/outset"
     MKUSER_OPTIONS=""
    ;|
    ^_mbsetupuser)
@@ -474,12 +445,17 @@ case $1 in
     # add completesetup with volume owner details, without automatic login.
     "$C_DIALOG"
     
-    #
-    "$C_ENROLMENT" "startTrackerDialog" &
+    # code here to be completed
+    "$C_ENROLMENT" "startTrackerDialog" >> /dev/null 2>&1 &
     
     MKUSER_OPTIONS="--secure-token-admin-account-name '$loggedinusername' --secure-token-admin-password '$loggedinpassword'"
    ;|
    *)
+    # Setup Startup after restart
+    trackNow "Add this script to startup process" \
+     secure "defaults write '$STARTUP_PLIST' Label '$DEFAULTS_NAME' ; defaults write '$STARTUP_PLIST' RunAtLoad -bool TRUE ; defaults write '$STARTUP_PLIST' ProgramArguments -array '$C_ENROLMENT' ; chmod go+r '$STARTUP_PLIST'" "Creating '$STARTUP_PLIST'" \
+     file "$STARTUP_PLIST"
+
     # unbind from Active Directory (if bound)
     if [ "$( ls /Library/Preferences/OpenDirectory/Configurations/Active\ Directory | wc -l )" -gt 0 ]; then
      POLICY_UNBIND="$( defaultRead policyADUnbind )"
@@ -511,23 +487,14 @@ case $1 in
      test '[ "$COMPUTER_NAME" != "$( scutil --get ComputerName )" ]'
    ;|
    _mbsetupuser)
-    # restart by sending quit message to dialog
-#    echo '!#/bin/zsh -f' > "$STARTUP_SCRIPT"
-#    echo "\"$C_ENROLMENT\" process" >> "$STARTUP_SCRIPT"
-#    chmod 755 "$STARTUP_SCRIPT"
-    runIt "defaults write '$STARTUP_PLIST' Label '$DEFAULTS_NAME'"
-    runIt "defaults write '$STARTUP_PLIST' RunAtLoad -bool TRUE"
-    runIt "defaults write '$STARTUP_PLIST' ProgramArguments -array '$C_ENROLMENT' 'process'"
-    runIt "defaults delete '$LOGIN_PLIST' LimitLoadToSessionType"
-    chmod go+r "$STARTUP_PLIST"
-
+    # Restart, and record it as a task
     trackNow "Restarting for Application Installation" \
-     command 'echo "quit:" >> "$TRACKER_COMMAND"' \
-     result
+     command 'shutdown -r +1 &' \
+     test true
    ;;
    *)
     # trigger processing
-    "$C_ENROLMENT" process
+    "$C_ENROLMENT" process >> /dev/null 2>&1
    ;;
   esac
   unsetopt extended_glob
@@ -535,29 +502,23 @@ case $1 in
  startTrackerDialog)
   # to open the event tracking dialog
   TRACKER=true
-  echo > "$TRACKER_COMMAND" # Should not start the loop with anything in it
+  echo > "$TRACKER_COMMAND"
   until [[ "$( tail -n1 "$TRACKER_COMMAND" )" = "quit:" ]]; do
-   echo > "$TRACKER_COMMAND" # Should not start a dialog with anything in it
    if $TRACKER; then
     touch "$TRACKER_RUNNING"
     logIt "Starting Progress Dialog..."
-    "$C_DIALOG" --loginwindow --jsonfile "$TRACKER_JSON" --button1text "Show Log..."
+#    runIt "'$C_DIALOG' --loginwindow --jsonfile '$TRACKER_JSON'"
+    runIt "'$C_DIALOG' --jsonfile '$TRACKER_JSON'"
     rm -f "$TRACKER_RUNNING"
     TRACKER=false
    else
     logIt "Starting Log view Dialog..."
-    "$C_DIALOG" --loginwindow --jsonfile "$LOG_JSON" --button1text "Show Progress..."
+#    runIt "'$C_DIALOG' --loginwindow --jsonfile '$LOG_JSON'"
+    runIt "'$C_DIALOG' --jsonfile '$LOG_JSON'"
     TRACKER=true
    fi
    
   done
-  if [ "$2" = "-restart" ]; then
-#   mv "$LOGINW_SCRIPT" "$LOGINU_SCRIPT"
-#   echo '!#/bin/zsh -f' > "$LOGINU_SCRIPT"
-#   echo "\"$C_ENROLMENT\" process" >> "$LOGINU_SCRIPT"
-   "$C_DIALOG" --loginwindow --title "Welcome to ${"$( defaultRead corpName )":-"The Service Desk"}" --message "Restarting for Application Installation." --timer 60 --position bottom --button1text "Restart Now..."
-   shutdown -r now
-  fi
  ;;
  *)
   # load saved settings
@@ -575,6 +536,34 @@ case $1 in
   track string message "Please wait while this computer is set up...<br>Log File available at: $LOG_FILE"
   plutil -replace message -string "Please wait while this computer is set up...<br>Log File available at: $LOG_FILE" "$LOG_JSON"
 
+  # wait for Finder
+  while [ "$( pgrep "Finder" )" = "" ]; do
+   sleep 1
+  done
+  
+  # reset WHO_LOGGED
+  if [ "$( who | grep console | wc -l )" -gt 1 ]; then
+   WHO_LOGGED="$( who | grep -v mbsetupuser | grep -m1 console | cut -d " " -f 1 )"
+  else
+   WHO_LOGGED="$( who | grep -m1 console | cut -d " " -f 1 )"
+  fi
+  
+  # Start Tracker dialog
+  if [ "$( pgrep -lu "root" "Dialog" )" = "" ]; then
+   "$C_ENROLMENT" startTrackerDialog >> /dev/null 2>&1 &
+  fi
+  sleep 5
+  
+  # now is a good time to start Self Service
+  launchctl asuser $( id -u $WHO_LOGGED ) osascript -e "tell application \"Finder\" to open POSIX file \"$SELF_SERVICE\""
+  sleep 5
+
+  # and close Finder & Dock if we just started up (i.e. if WHO_LOGGED = TEMP_ADMIN)
+  if [ "$WHO_LOGGED" = "$TEMP_ADMIN" ]; then
+   launchctl bootout gui/$( id -u $WHO_LOGGED )/com.apple.Dock.agent
+   launchctl bootout gui/$( id -u $WHO_LOGGED )/com.apple.Finder
+  fi
+  
   # finishing setting up admin accounts
   # Add JSS ADMIN
   # This will load the $JAMF_ADMIN and $JAMF_PASS login details
@@ -585,6 +574,7 @@ case $1 in
    --data-urlencode "client_secret=$( readSaved apiSecret )" )" | /usr/bin/jq -Mr ".access_token" )"
   if [[ "$JAMF_AUTH_TOKEN" = *httpStatus* ]]; then
    logIt "This should not have happened, are the API ID/Secret details correct?\nResponse from $JAMF_URL:\n$JAMF_AUTH_TOKEN"
+   "$C_DIALOG" --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to login to Jamf Pro API"
    exit 1
   fi
   sleep 1
@@ -601,6 +591,7 @@ case $1 in
   done
   if [ -z "$JAMF_ADMIN" ] || [ -z "$JAMF_GUID" ]; then
    logIt "this should not have happened, unable to get Jamf Managed Account Details:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
+   "$C_DIALOG" --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account username from Jamf Pro API"
    exit 1
   fi
   sleep 1
@@ -609,6 +600,7 @@ case $1 in
    -H "accept: application/json" -H "Authorization: Bearer $JAMF_AUTH_TOKEN" )" "password" )"
   if [ -z "$JAMF_PASS" ]; then
    logIt "this should not have happened, unable to get Jamf Managed Account Password:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
+   "$C_DIALOG" --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account password from Jamf Pro API"
    exit 1
   fi
 
@@ -639,9 +631,6 @@ case $1 in
    TRACKER_START=${$( jq 'currentitem' ):--1}
    track integer startitem $((TRACKER_START+1))
    
-   # Now is a good time to start Self Service in the background
-   open -j -a "$SELF_SERVICE"
-
    # load software installs
    NEW_INDEX=0
    track update status wait
@@ -716,7 +705,7 @@ case $1 in
    sleep 2
    echo "quit:" >> "$TRACKER_COMMAND"
    sleep 5
-   launchctl kickstart gui/$( id -u $( who | grep -v mbsetupuser | grep -m1 console | cut -d " " -f 1 ) )/"$DEFAULTS_NAME.loginwindow"
+   "$C_ENROLMENT" startTrackerDialog >> /dev/null 2>&1 &
    sleep 5
    plutil -replace listitem.$TRACKER_START.statustext -string "Loaded" "$TRACKER_JSON"
    echo "listitem: index: $TRACKER_START, statustext: Loaded" >> "$TRACKER_COMMAND"
@@ -795,14 +784,10 @@ case $1 in
      ;;
     esac
    done
+   logIt "Success: $SUCCESS_COUNT, Failed: $FAILED_COUNT"
   fi
-  # trigger cleanup
-#  rm -rf "$LOGINW_SCRIPT" "$LOGINU_SCRIPT"
-#  mkdir -p "$( dirname "$STARTUP_SCRIPT" )"
-#  echo '!#/bin/zsh -f' > "$STARTUP_SCRIPT"
-#  echo "\"$C_ENROLMENT\" cleanUp" >> "$STARTUP_SCRIPT"
-#  chmod 755 "$STARTUP_SCRIPT"
-  runIt "defaults write '$STARTUP_PLIST' ProgramArguments -array '$C_ENROLMENT' 'cleanUp'"
+  # Time to send email and finish.
+  
  ;;
  cleanUp)
   # A clean up routine
@@ -815,6 +800,10 @@ case $1 in
   eval "rm -rf $CLEANUP_FILES"
  ;;
  *)
-  # how did this happen
+  if [ "$( defaults read /Library/Preferences/com.apple.loginwindow.plist autoLoginUser 2>/dev/null )" = "$TEMP_ADMIN" ]; then
+   "$C_ENROLMENT" process >> /dev/null 2>&1
+  else
+   "$C_ENROLMENT" cleanUp >> /dev/null 2>&1
+  fi
  ;;
 esac
