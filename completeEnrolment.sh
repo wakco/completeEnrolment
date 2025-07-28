@@ -203,8 +203,12 @@ trackIt() {
  track update status wait
  case $3 in
   stamp)
-   
-  ;;
+   if [ "$RECON_DATE" = "" ] || [ $RECON_DATE -gt $(($RECON_DATE+$PER_APP*60)) ]; then
+    RECON_DATE=$( date "+%s" )
+   else
+    return 0
+   fi
+  ;&
   date)
    track update statustext "Checking..."
   ;;
@@ -611,13 +615,13 @@ case $1 in
     touch "$TRACKER_RUNNING"
     logIt "Starting Progress Dialog..."
 #    runIt "'$C_DIALOG' --loginwindow --jsonfile '$TRACKER_JSON'"
-    runIt "'$C_DIALOG' --jsonfile '$TRACKER_JSON'" --button1text "Show Log..."
+    runIt "'$C_DIALOG' --jsonfile '$TRACKER_JSON' --button1text 'Show Log...'"
     rm -f "$TRACKER_RUNNING"
     TRACKER=false
    else
     logIt "Starting Log view Dialog..."
 #    runIt "'$C_DIALOG' --loginwindow --jsonfile '$LOG_JSON'"
-    runIt "'$C_DIALOG' --jsonfile '$LOG_JSON'" --button1text "Show Tasks..."
+    runIt "'$C_DIALOG' --jsonfile '$LOG_JSON' --button1text 'Show Tasks...'"
     TRACKER=true
    fi
    
@@ -804,16 +808,16 @@ case $1 in
     infoBox
     ((NEW_INDEX++))
    done
-   track new "Inventory Update"
-   track update command "'$C_JAMF' recon"
-   track update commandtype command
-   track update subtitle "jamf recon"
-   track update successtype "date"
    track new "Pause for 30 seconds"
    track update command "sleep 30"
    track update commandtype command
    track update subtitle "Pause for 30 seconds before checking again."
    track update successtype "pause"
+   track new "Inventory Update"
+   track update command "'$C_JAMF' recon"
+   track update commandtype command
+   track update subtitle "Updates inventory once every $PER_APP minutes"
+   track update successtype "stamp"
    
    # Restart dialog (just to make sure it got everything).
 #   dialog --ontop --timer 15 --title "Reloading..." --message "Reloading the tracking dialog..." --icon none --button1disabled --width 400 --height 150 &
