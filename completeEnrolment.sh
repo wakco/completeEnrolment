@@ -20,6 +20,8 @@ DEFAULTS_FILE="$LIB/Managed Preferences/$DEFAULTS_PLIST"
 CLEANUP_FILES=( "$C_ENROLMENT" )
 STARTUP_PLIST="$LIB/LaunchDaemons/$DEFAULTS_PLIST"
 CLEANUP_FILES+=( "$STARTUP_PLIST" )
+LOGIN_PLIST="$LIB/LaunchAgents/$DEFAULTS_PLIST"
+CLEANUP_FILES+=( "$LOGIN_PLIST" )
 SETTINGS_PLIST="$PREFS/$DEFAULTS_PLIST"
 CLEANUP_FILES+=( "$SETTINGS_PLIST" )
 CACHE="$LIB/Caches/completeEnrolment"
@@ -52,6 +54,9 @@ if [ -e /usr/bin/jq ]; then
  jq() {
   /usr/bin/jq -Mr ".$1 // empty" "$TRACKER_JSON"
  }
+ readJSON() {
+  printf '%s' "$1" | /usr/bin/jq -r ".$2 // empty"
+ }
 else
  # makeshift jq replacement
  jq() {
@@ -67,15 +72,27 @@ else
    -e 'const env = $.NSProcessInfo.processInfo.environment.objectForKey("JSON").js' \
    -e "JSON.parse(env).$GET_IT"
  }
+ readJSON() {
+  JSON="$1" osascript -l 'JavaScript' \
+   -e 'const env = $.NSProcessInfo.processInfo.environment.objectForKey("JSON").js' \
+   -e "JSON.parse(env).$2"
+ }
 fi
 
 # Log File
 
 # This will Generate a number of log files based on the task and when they started.
 
-LOG_FILE="$LIB/Logs/$DEFAULTS_NAME-$( if [ "$1" = "/" ]; then echo "Jamf-$WHO_LOGGED" ; else echo "Command-$1" ; fi )-$( date "+%Y-%m-%d %H-%M-%S %Z" ).log"
+LOG_FILE="$LIB/Logs/$DEFAULTS_NAME-$( if [ "$1" = "/" ]; then echo "Jamf" ; else echo "$1" ; fi )-$WHO_LOGGED-$( date "+%Y-%m-%d %H-%M-%S %Z" ).log"
 
 # Functions
+
+errorIt() {
+ logIt "$2" >&2
+ logIt "Removing: $CLEANUP_FILES"
+ eval "rm -rf $CLEANUP_FILES"
+ exit $1
+}
 
 logIt() {
  echo "$(date) - $@" 2>&1 | tee -a "$LOG_FILE"
@@ -111,6 +128,36 @@ runIt() {
  local THE_RETURN=$?
  echo "$(date) --- Executed '${2:-"$1"}' which returned signal $THE_RETURN and:\n$THE_RESULT" | tee -a "$LOG_FILE"
  return $THE_RETURN
+}
+
+infoBox() {
+ INFOBOX="**macOS $( sw_vers -productversion )** on  <br>$( scutil --get ComputerName )  <br><br>"
+ INFOBOX+="**Started:**  <br>$( jq startdate )  <br><br>"
+ if [ "$START_TIME" != "" ]; then
+  INFOBOX+="**Restarted:**  <br>$( date -jr "$START_TIME" "+%d/%m/%Y %H:%M" )  <br><br>"
+ fi
+ if [ "$FINISH_TIME" != "" ]; then
+  INFOBOX+="**Estimated Finish:**  <br>$( date -jr "$FINISH_TIME" "+%d/%m/%Y %H:%M" )  <br><br>"
+ fi
+ if [ "$NEW_INDEX" != "" ]; then
+  INFOBOX+="**Apps to Install:** $NEW_INDEX  <br><br>"
+ fi
+ if [ "$SUCCESS_COUNT" != "" ]; then
+  INFOBOX+="**Installed:** $SUCCESS_COUNT  <br><br>"
+ fi
+  if [ "$FAILED_COUNT" != "" ]; then
+  INFOBOX+="**Failed:** $FAILED_COUNT  <br><br>"
+ fi
+ if [ "$FULLSUCCESS_COUNT" != "" ]; then
+  INFOBOX+="**Completed Tasks:** $FULLSUCCESS_COUNT  <br><br>"
+ fi
+ track string infobox "$INFOBOX"
+ plutil replace infobox -string "$INFOBOX" "$LOG_JSON"
+ if [ ! -e "$TRACKER_RUNNING" ]; then
+  echo "infobox: $INFOBOX" >> "$TRACKER_COMMAND"
+  sleep 0.1
+ fi
+ logIt "$INFOBOX"
 }
 
 track() {
@@ -155,6 +202,9 @@ track() {
 trackIt() {
  track update status wait
  case $3 in
+  stamp)
+   
+  ;;
   date)
    track update statustext "Checking..."
   ;;
@@ -162,10 +212,10 @@ trackIt() {
    track update statustext "Paused."
   ;;
   *)
-   if [ COUNTDOWN = "" ]; then
+   if [ COUNT = "" ]; then
     track update statustext "Running..."
    else
-    track update statustext "Attempting #$COUNTDOWN Running..."
+    track update statustext "Attempting #$COUNT Running..."
    fi
   ;;
  esac
@@ -175,9 +225,6 @@ trackIt() {
   ;;
   policy)
    runIt "$C_JAMF policy -event $2"
-  ;;
-  policyid)
-   runIt "$C_JAMF policy -id $2"
   ;;
   install)
    runIt "$C_INSTALL $2 NOTIFY=silent $GITHUBAPI"
@@ -189,7 +236,7 @@ trackIt() {
  THE_RESULT=$?
  case $3 in
   date)
-   track update statustext "Last Updated: $(date)"
+   track update statustext "Last Updated - $(date)"
   ;|
   pause)
    track update statustext "Resumed."
@@ -203,15 +250,15 @@ trackIt() {
    THE_TEST=false
   ;|
   appstore)
-   THE_TEST="CHECKAPP=\"\$( spctl -a -vv '$$4' 2>&1 )\" && [[ \"\$CHECKAPP\" = *'Mac App Store'* ]]"
+   THE_TEST="CHECKAPP=\"\$( spctl -a -vv '$4' 2>&1 )\" && [[ \"\$CHECKAPP\" = *'Mac App Store'* ]]"
   ;|
   teamid)
-   if CHECKAPP="$( spctl -a -vv '$$4' 2>&1 )"; then
+   if CHECKAPP="$( spctl -a -vv "$4" 2>&1 )"; then
     if [[ "$CHECKAPP" = *"($5)"* ]]; then
      THE_TEST=true
     else
      track update status success
-     track update statustext "Completed, but Developer ID ($5) didn't match installed ID ($( echo "$CHECKAPP" | awk '/origin=/ {print $NF }' | tr -d '()' ))"
+     track update statustext "Completed, but Team ID ($5) didn't match installed ID ($( echo "$CHECKAPP" | awk '/origin=/ {print $NF }' | tr -d '()' ))"
      return 0
     fi
    fi
@@ -232,10 +279,10 @@ trackIt() {
     return 0
    else
     track update status fail
-    if [ $COUNTDOWN = "" ]; then
+    if [ $COUNT = "" ]; then
      track update statustext "Failed, waiting for next attempt..."
     else
-     track update statustext "Attempt #$COUNTDOWN Failed, waiting for next attempt..."
+     track update statustext "Attempt #$COUNT Failed... waiting for next attempt..."
     fi
     return 1
    fi
@@ -244,20 +291,22 @@ trackIt() {
 }
 
 repeatIt() {
- COUNTDOWN=1
- until [ $COUNTDOWN -eq 6 ] || trackIt "$1" "$2" "$3" "$4"; do
+ COUNT=1
+ until [ $COUNT -gt $PER_APP ] || trackIt "$1" "$2" "$3" "$4"; do
   sleep 5
-  ((COUNTDOWN++))
+  ((COUNT++))
  done
- if [ $COUNTDOWN -eq 6 ]; then
+ if [ $COUNT -gt $PER_APP ]; then
   track update status error
-  track update statustext "Failed after 5 attempts"
-  unset COUNTDOWN
+  track update statustext "Failed after $PER_APP attempts"
+  unset COUNT
   return 1
  else
   track update status success
-  track update statustext "Completed"
-  unset COUNTDOWN
+  if [[ "$3" != (date|pause) ]]; then
+   track update statustext "Completed"
+  fi
+  unset COUNT
   return 0
  fi
 }
@@ -267,13 +316,24 @@ repeatIt() {
 #  status confirmation type: file)
 trackNow() {
  track new "$1"
- if [ "$2" = "secure" ]; then
-  track update subtitle "$4"
-  repeatIt command "$3" "$5" "$6"
- else
-  track update subtitle "$3"
-  repeatIt "$2" "$3" "$4" "$5"
- fi
+ case $2 in
+  secure)
+   track update subtitle "$4"
+   repeatIt command "$3" "$5" "$6"
+  ;;
+  policy)
+   track update subtitle "Jamf Event - $3"
+   repeatIt "$2" "$3" "$4" "$5"
+  ;;
+  install)
+   track update subtitle "Installomator Label - $3"
+   repeatIt "$2" "$3" "$4" "$5"
+  ;;
+  *)
+   track update subtitle "$3"
+   repeatIt "$2" "$3" "$4" "$5"
+  ;;
+ esac
  THE_RESULT=$?
  # Process error here?
  return $THE_RESULT
@@ -305,6 +365,7 @@ TEMP_ADMIN="${"$( defaultRead tempAdmin )":-"setup_admin"}"
 TEMP_NAME="${"$( defaultRead tempName )":-"Setup Admin"}"
 LAPS_ADMIN="${"$( defaultRead lapsAdmin )":-"laps_admin"}"
 LAPS_NAME="${"$( defaultRead lapsName )":-"LAPS Admin"}"
+PER_APP=${"$( defaultRead perAPP )":-"5"}
 
 # And start processing
 
@@ -335,11 +396,10 @@ case $1 in
   fi
   settingsPlist write laps -string "$LAPS_PASS"
   if [ "$7" = "" ] || [ "$8" = "" ]; then
-   logIt "API details are required for access to the \$JAMF_ADMIN password, the following was supplied:\nAPI ID: $7\nAPI Secret: $8"
    if [ "$WHO_LOGGED" != "_mbsetupuser" ]; then
     "$C_DIALOG" --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: missing Jamf Pro API login details"
    fi
-   exit 1
+   errorIt 2 "API details are required for access to the \$JAMF_ADMIN password, the following was supplied:\nAPI ID: $7\nAPI Secret: $8"
   else
    settingsPlist write apiId -string "$7"
    settingsPlist write apiSecret -string "$8"
@@ -359,28 +419,32 @@ case $1 in
   track string position "bottom"
   track string height "75%"
   track string width "80%"
+  track bool blurscreen true
   ditto "$TRACKER_JSON" "$LOG_JSON"
   plutil -insert listitem -array "$TRACKER_JSON"
   track string liststyle "compact"
-  track string button1text "Show Log..."
-  plutil -replace button1text -string "Show Progress..." "$LOG_JSON"
   plutil -replace displaylog -string "$LOG_FILE" "$LOG_JSON"
 
   # set time
   TIME_ZONE="${"$( defaultRead systemTimeZone )":-"$( systemsetup -gettimezone | awk "{print \$NF}" )"}"
-  trackNow "Setting Time Zone to '$TIME_ZONE'" \
+  trackNow "Setting Time Zone" \
    command "/usr/sbin/systemsetup -settimezone '$TIME_ZONE'" \
    result
   sleep 5
   SYSTEM_TIME_SERVER="${"$( defaultRead systemTimeServer )":-"$( systemsetup -getnetworktimeserver | awk "{print \$NF}" )"}"
-  trackNow "Setting Network Time Sync server to '$SYSTEM_TIME_SERVER'" \
-   command "/usr/sbin/systemsetup -setnetworktimeserver $SYSTEM_TIME_SERVER" \
+  trackNow "Setting Network Time Sync server" \
+   command "/usr/sbin/systemsetup -setnetworktimeserver '$SYSTEM_TIME_SERVER'" \
    result
   sleep 5
-  trackNow "Synchronising the Time with '$SYSTEM_TIME_SERVER'" \
-   command "/usr/bin/sntp -Ss $SYSTEM_TIME_SERVER" \
+  trackNow "Synchronising the Time" \
+   command "/usr/bin/sntp -Ss '$SYSTEM_TIME_SERVER'" \
    result
   sleep 5
+  
+  # Load infoBox
+  track string starttime "$( date "+%s" )"
+  track string startdate "$( date -jr "$( jq starttime )" "+%d/%m/%Y %H:%M" )"
+  infoBox
   
   # Install Rosetta (just in case, and skip it for macOS 28+)
   if [ "$CPU_ARCH" = "arm64" ] && [ $(sw_vers -productVersion | cut -d '.' -f 1) -lt 28 ]; then
@@ -392,21 +456,25 @@ case $1 in
   
   # Install initial file
   INSTALL_POLICY="${"$( defaultRead policyInitialFiles )":-"installInitialFiles"}"
-  trackNow "Installing Initial Files with policy: $INSTALL_POLICY"
+  trackNow "Installing Initial Files" \
    policy "$INSTALL_POLICY" \
-   filecommand "$DIALOG_ICON"
+   file "$DIALOG_ICON"
+  infoBox
+
   # Install Installomator
   # This can be either the custom version from this repository, or the script that installs the
   # official version.
   INSTALL_POLICY="${"$( defaultRead policyInstallomator )":-"installInstallomator"}"
-  trackNow "Installing Installomator with policy: $INSTALL_POLICY" \
+  trackNow "Installing Installomator" \
    policy "$INSTALL_POLICY" \
    file "/usr/local/Installomator/Installomator.sh"
+  infoBox
   
   # Install swiftDialog
-  trackNow "Installing swiftDialog (the software generating this window) with Installomator" \
+  trackNow "Installing swiftDialog (the software generating this window)" \
    install dialog \
    file "$C_DIALOG"
+  
   
   # Executed by Jamf Pro
   # Load config profile settings and save them for later use in a more secure location, do the same
@@ -428,14 +496,28 @@ case $1 in
     runIt "defaults write $LIB/Preferences/com.apple.loginwindow.plist SHOWFULLNAME -bool true"
         
     # Restart the login window
-    runIt "/usr/bin/defaults write /Library/Preferences/com.apple.loginwindow.plist LoginwindowText 'Enrolled at $( /usr/bin/profiles status -type enrollment | /usr/bin/grep server | /usr/bin/awk -F '[:/]' '{ print $5 }' )\nThis computer will restart shortly,\nplease wait while initial configuration in performed...'"
+    runIt "/usr/bin/defaults write /Library/Preferences/com.apple.loginwindow.plist LoginwindowText 'Enrolled at $( /usr/bin/profiles status -type enrollment | /usr/bin/grep server | /usr/bin/awk -F '[:/]' '{ print $5 }' )\nplease wait while initial configuration in performed...\nThis computer will restart shortly.'"
     sleep 5
     
     # only kill the login window if it is already running
     if [ "$( pgrep -lu "root" "loginwindow" )" != "" ]; then
      runIt "pkill loginwindow"
     fi
-    
+
+    # start loginwindow
+    sleep 2
+    defaults write "$LOGIN_PLIST" LimitLoadToSessionType -array "LoginWindow"
+    defaults write "$LOGIN_PLIST" Label "$DEFAULTS_NAME.loginwindow"
+    defaults write "$LOGIN_PLIST" RunAtLoad -bool TRUE
+    defaults write "$LOGIN_PLIST" ProgramArguments -array \
+     "/Library/Application Support/Dialog/Dialog.app/Contents/MacOS/Dialog" \
+     "--loginwindow" "--button1disabled" "--button1text" "none" "--jsonfile" "$TRACKER_JSON"
+    chmod ugo+r "$LOGIN_PLIST"
+    sleep 2
+    touch "$TRACKER_RUNNING"
+    launchctl load -S LoginWindow "$LOGIN_PLIST"
+    sleep 2
+
     MKUSER_OPTIONS=""
    ;|
    ^_mbsetupuser)
@@ -446,7 +528,7 @@ case $1 in
     "$C_DIALOG"
     
     # code here to be completed
-    "$C_ENROLMENT" "startTrackerDialog" >> /dev/null 2>&1 &
+    runIt "'$C_ENROLMENT' startDialog >> /dev/null 2>&1 &"
     
     MKUSER_OPTIONS="--secure-token-admin-account-name '$loggedinusername' --secure-token-admin-password '$loggedinpassword'"
    ;|
@@ -463,43 +545,64 @@ case $1 in
       trackNow "Unbinding from Active Directory - Required for account management, and computer (re)naming." \
        command "/usr/sbin/dsconfigad -leave -force" \
        test '[ "$( ls /Library/Preferences/OpenDirectory/Configurations/Active\ Directory | wc -l )" -eq 0 ]'
-    else
-     trackNow "Unbinding from Active Directory - Required for account management, and computer (re)naming." \
-      policy "$POLICY_UNBIND" \
-      test '[ "$( ls /Library/Preferences/OpenDirectory/Configurations/Active\ Directory | wc -l )" -eq 0 ]'
+     else
+      trackNow "Unbinding from Active Directory - Required for account management, and computer (re)naming." \
+       policy "$POLICY_UNBIND" \
+       test '[ "$( ls /Library/Preferences/OpenDirectory/Configurations/Active\ Directory | wc -l )" -eq 0 ]'
+     fi
     fi
-    fi
+
+    # set computername
+    INSTALL_POLICY="${"$( defaultRead policyComputerName )":-"fixComputerName"}"
+    COMPUTER_NAME="$( scutil --get ComputerName )"
+    trackNow "Setting computer name" \
+     policy "$INSTALL_POLICY" \
+     test '[ "$COMPUTER_NAME" != "$( scutil --get ComputerName )" ]'
+    infoBox
+    
+    # perform a recon
+    trackNow "Updating Inventory" \
+     command "'$C_JAMF' recon" \
+     test true
+
     # install mkuser
-    trackNow "Installing mkuser with Installomator" \
+    trackNow "Installing mkuser" \
      install mkuser \
      file "$C_MKUSER"
     
     # Add complete setup
     trackNow "Creating Complete Setup Account" \
-     secure "'$C_MKUSER' --username '$TEMP_ADMIN' --password '$( settingsPlist read temp | base64 -d )' --real-name '$TEMP_NAME' --home /Users/$TEMP_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --automatic-login --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes $MKUSER_OPTIONS" "Creating username $TEMP_ADMIN" \
+     secure "'$C_MKUSER' --username '$TEMP_ADMIN' --password '$( settingsPlist read temp | base64 -d )' --real-name '$TEMP_NAME' --home /Users/$TEMP_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --automatic-login --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes $MKUSER_OPTIONS" "Creating username $TEMP_ADMIN with mkuser" \
      file "/Users/$TEMP_ADMIN"
     
-    # set computername
-    INSTALL_POLICY="${"$( defaultRead policyComputerName )":-"fixComputerName"}"
-    COMPUTER_NAME="$( scutil --get ComputerName )"
-    trackNow "Setting computer name using policy: $INSTALL_POLICY" \
-     policy "$INSTALL_POLICY" \
-     test '[ "$COMPUTER_NAME" != "$( scutil --get ComputerName )" ]'
    ;|
    _mbsetupuser)
     # Restart, and record it as a task
+    shutdown -r +1 &
     trackNow "Restarting for Application Installation" \
-     command 'shutdown -r +1 &' \
-     test true
+     none 'shutdown -r +1 &' \
+     date
+    sleep 5
+    rm -rf "$LOGIN_PLIST" "$TRACKER_RUNNING"
+    # if we get a dialog going, keep it open for at least half the time?
+    # sleep 30
    ;;
    *)
     # trigger processing
-    "$C_ENROLMENT" process >> /dev/null 2>&1
+    runIt "'$C_ENROLMENT' process >> /dev/null 2>&1"
    ;;
   esac
   unsetopt extended_glob
+  if ${$( defaultReadBool emailJamfLog ):-false} ; then
+   # cannot use errorIt to exit here, since 1. this is not an error, and 2. because errorIt will
+   # also cleanUp
+   logIt "Exiting with an error signal as requested in the configuration."
+   exit 1
+  else
+   exit 0
+  fi
  ;;
- startTrackerDialog)
+ startDialog)
   # to open the event tracking dialog
   TRACKER=true
   echo > "$TRACKER_COMMAND"
@@ -508,13 +611,13 @@ case $1 in
     touch "$TRACKER_RUNNING"
     logIt "Starting Progress Dialog..."
 #    runIt "'$C_DIALOG' --loginwindow --jsonfile '$TRACKER_JSON'"
-    runIt "'$C_DIALOG' --jsonfile '$TRACKER_JSON'"
+    runIt "'$C_DIALOG' --jsonfile '$TRACKER_JSON'" --button1text "Show Log..."
     rm -f "$TRACKER_RUNNING"
     TRACKER=false
    else
     logIt "Starting Log view Dialog..."
 #    runIt "'$C_DIALOG' --loginwindow --jsonfile '$LOG_JSON'"
-    runIt "'$C_DIALOG' --jsonfile '$LOG_JSON'"
+    runIt "'$C_DIALOG' --jsonfile '$LOG_JSON'" --button1text "Show Tasks..."
     TRACKER=true
    fi
    
@@ -522,7 +625,7 @@ case $1 in
  ;;
  *)
   # load saved settings
-  if [ "$( settingsPlist read )" = "" ]; then
+  if [ "$( settingsPlist read github )" = "" ]; then
    GITHUBAPI=""
   else
    GITHUBAPI=" GITHUBAPI=$( readSaved github )"
@@ -535,23 +638,21 @@ case $1 in
   plutil -replace displaylog -string "$LOG_FILE" "$LOG_JSON"
   track string message "Please wait while this computer is set up...<br>Log File available at: $LOG_FILE"
   plutil -replace message -string "Please wait while this computer is set up...<br>Log File available at: $LOG_FILE" "$LOG_JSON"
+  START_TIME=$( date "+%s" )
+  infoBox
 
   # wait for Finder
   while [ "$( pgrep "Finder" )" = "" ]; do
    sleep 1
   done
   
-  # reset WHO_LOGGED
+  # reset WHO_LOGGED as starting before the Finder may have collecting the wrong information
   if [ "$( who | grep console | wc -l )" -gt 1 ]; then
    WHO_LOGGED="$( who | grep -v mbsetupuser | grep -m1 console | cut -d " " -f 1 )"
   else
    WHO_LOGGED="$( who | grep -m1 console | cut -d " " -f 1 )"
   fi
   
-  # Start Tracker dialog
-  if [ "$( pgrep -lu "root" "Dialog" )" = "" ]; then
-   "$C_ENROLMENT" startTrackerDialog >> /dev/null 2>&1 &
-  fi
   sleep 5
   
   # now is a good time to start Self Service
@@ -560,9 +661,16 @@ case $1 in
 
   # and close Finder & Dock if we just started up (i.e. if WHO_LOGGED = TEMP_ADMIN)
   if [ "$WHO_LOGGED" = "$TEMP_ADMIN" ]; then
+   track update status success
    launchctl bootout gui/$( id -u $WHO_LOGGED )/com.apple.Dock.agent
    launchctl bootout gui/$( id -u $WHO_LOGGED )/com.apple.Finder
   fi
+  
+  # Start Tracker dialog
+  if [ "$( pgrep -lu "root" "Dialog" )" = "" ]; then
+   runIt "'$C_ENROLMENT' startDialog >> /dev/null 2>&1 &"
+  fi
+  sleep 5
   
   # finishing setting up admin accounts
   # Add JSS ADMIN
@@ -573,9 +681,8 @@ case $1 in
    --data-urlencode 'grant_type=client_credentials' \
    --data-urlencode "client_secret=$( readSaved apiSecret )" )" | /usr/bin/jq -Mr ".access_token" )"
   if [[ "$JAMF_AUTH_TOKEN" = *httpStatus* ]]; then
-   logIt "This should not have happened, are the API ID/Secret details correct?\nResponse from $JAMF_URL:\n$JAMF_AUTH_TOKEN"
    "$C_DIALOG" --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to login to Jamf Pro API"
-   exit 1
+   errorIt 2 "This should not have happened, are the API ID/Secret details correct?\nResponse from $JAMF_URL:\n$JAMF_AUTH_TOKEN"
   fi
   sleep 1
 
@@ -590,22 +697,20 @@ case $1 in
    fi
   done
   if [ -z "$JAMF_ADMIN" ] || [ -z "$JAMF_GUID" ]; then
-   logIt "this should not have happened, unable to get Jamf Managed Account Details:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
    "$C_DIALOG" --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account username from Jamf Pro API"
-   exit 1
+   errorIt 2 "this should not have happened, unable to get Jamf Managed Account Details:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
   fi
   sleep 1
 
   JAMF_PASS="$( readJSON "$( curl -s "${JAMF_URL}api/v2/local-admin-password/$( defaultRead managementID )/account/$JAMF_ADMIN/$JAMF_GUID/password" \
    -H "accept: application/json" -H "Authorization: Bearer $JAMF_AUTH_TOKEN" )" "password" )"
   if [ -z "$JAMF_PASS" ]; then
-   logIt "this should not have happened, unable to get Jamf Managed Account Password:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
    "$C_DIALOG" --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account password from Jamf Pro API"
-   exit 1
+   errorIt 2 "this should not have happened, unable to get Jamf Managed Account Password:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
   fi
 
   trackNow "Creating $JAMF_ADMIN Account" \
-  secure "'$C_MKUSER' --username $JAMF_ADMIN --password '$JAMF_PASS' --real-name '$JAMF_ADMIN Account' --home /private/var/$JAMF_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes -adminUser '$TEMP_ADMIN' -adminPassword '$( readSaved temp )'" "Creating username $JAMF_ADMIN" \
+  secure "'$C_MKUSER' --username $JAMF_ADMIN --password '$JAMF_PASS' --real-name '$JAMF_ADMIN Account' --home /private/var/$JAMF_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes --secure-token-admin-account-name '$TEMP_ADMIN' --secure-token-admin-password '$( readSaved temp )'" "Creating username $JAMF_ADMIN" \
    file "/private/var/$JAMF_ADMIN"
   # Add or update LAPS ADMIN
   if [ -e "/Users/$LAPS_ADMIN" ]; then
@@ -615,12 +720,12 @@ case $1 in
 
   else
    trackNow "Creating $LAPS_NAME Account" \
-    secure "'$C_MKUSER' --username $LAPS_ADMIN --password '$( readSaved laps )' --real-name '$LAPS_NAME' --home /private/var/$LAPS_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes -adminUser '$TEMP_ADMIN' -adminPassword '$( readSaved temp )'" "Creating username $LAPS_ADMIN" \
+    secure "'$C_MKUSER' --username $LAPS_ADMIN --password '$( readSaved laps )' --real-name '$LAPS_NAME' --home /private/var/$LAPS_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes --secure-token-admin-account-name '$TEMP_ADMIN' --secure-token-admin-password '$( readSaved temp )'" "Creating username $LAPS_ADMIN" \
     file "/private/var/$LAPS_ADMIN"
   fi
  
   if [ "$( defaults read "$DEFAULTS_FILE" installs 2>/dev/null )" != "" ]; then
-   
+     
    track new "Task List"
    track update status pending
    track update statustext "Loading..."
@@ -633,8 +738,9 @@ case $1 in
    
    # load software installs
    NEW_INDEX=0
+   infoBox
    track update status wait
-   until [ $NEW_INDEX -eq $( "$( listRead "installs" )" ) ]; do
+   until [ $NEW_INDEX -ge $( listRead "installs" ) ]; do
     # Cheating by using TRACKER_START to update the Task List loading entry
     plutil -replace listitem.$TRACKER_START.statustext -string "Loading task #$((NEW_INDEX+1))" "$LOG_JSON"
     echo "listitem: index: $TRACKER_START, statustext: Loading task #$((NEW_INDEX+1))"
@@ -649,6 +755,14 @@ case $1 in
     track update suppliedsubtitle "$SUBTITLE"
     SUBTITLE_TYPE="$( listRead "installs.$NEW_INDEX.subtitletype" )"
     track update subtitletype "$SUBTITLE_TYPE"
+    case $COMMAND in
+     policy)
+      COMMAND="Jamf Event - $COMMAND"
+     ;;
+     install)
+      COMMAND="Installomator Label - $COMMAND"
+     ;;
+    esac
     case $SUBTITLE_TYPE in
      secure)
       track update subtitle "$SUBTITLE"
@@ -687,26 +801,27 @@ case $1 in
     track update backupcommand "$( listRead "installs.$NEW_INDEX.backupcommand" )"
     track update status pending
     track update statustext "waiting to install..."
+    infoBox
     ((NEW_INDEX++))
    done
    track new "Inventory Update"
-   track update command "$C_JAMF recon"
-   track update commndtype command
+   track update command "'$C_JAMF' recon"
+   track update commandtype command
    track update subtitle "jamf recon"
    track update successtype "date"
    track new "Pause for 30 seconds"
    track update command "sleep 30"
-   track update commndtype command
+   track update commandtype command
    track update subtitle "Pause for 30 seconds before checking again."
    track update successtype "pause"
    
    # Restart dialog (just to make sure it got everything).
-   dialog --ontop --timer 15 --title "Reloading..." --message "Reloading the tracking dialog..." --icon none --button1disabled --width 400 --height 150 &
+#   dialog --ontop --timer 15 --title "Reloading..." --message "Reloading the tracking dialog..." --icon none --button1disabled --width 400 --height 150 &
    sleep 2
-   echo "quit:" >> "$TRACKER_COMMAND"
-   sleep 5
-   "$C_ENROLMENT" startTrackerDialog >> /dev/null 2>&1 &
-   sleep 5
+#   echo "quit:" >> "$TRACKER_COMMAND"
+#   sleep 5
+#   runIt "'$C_ENROLMENT' startDialog >> /dev/null 2>&1 &"
+#   sleep 5
    plutil -replace listitem.$TRACKER_START.statustext -string "Loaded" "$TRACKER_JSON"
    echo "listitem: index: $TRACKER_START, statustext: Loaded" >> "$TRACKER_COMMAND"
    sleep 0.1
@@ -715,44 +830,48 @@ case $1 in
    sleep 0.1
    
    # process software installs
-   START_TIME=$( date "+%s" )
-   WAIT_TIME=$(($NEW_INDEX*${"$( defaultRead perAPP )":-"5"}*60))
-   FINISH_TIME=$(($START_TIME+$WAIT_TIME))
    SUCCESS_COUNT=0
-   INFOBOX="**macOS $( sw_vers -productversion )** on  <br>$( scutil --get ComputerName )  <br><br>"
-   INFOBOX+="**Started:**  <br>$( date -jr "$START_TIME" "+%d/%m/%Y %H:%M" )  <br><br>"
-   INFOBOX+="**Estimated Finish:**  <br>$( date -jr "$FINISH_TIME" "+%d/%m/%Y %H:%M" )  <br><br>"
-   INFOBOX+="**Apps to Install:** $NEW_INDEX  <br><br>"
-   INFOBOX+='**Installed:** $SUCCESS_COUNT  <br><br>'
-   eval "track string infobox '$INFOBOX'"
+   WAIT_TIME=$(($( plutil -extract "listitem" raw -o - "$TRACKER_JSON" )*$PER_APP*60))
+   FINISH_TIME=$(($START_TIME+$WAIT_TIME))
+   infoBox
    FINISHED=false
-   COUNT=0
-   until $FINISHED; do
-    FAILED=false
+   COUNT=1
+   logIt "Total Tasks"
+   until [ $SUCCESS_COUNT -eq $NEW_INDEX ] || [ $( date "+%s" ) -gt $FINISH_TIME ]; do
     track integer currentitem $( jq 'startitem' )
     until [ $( jq 'currentitem' ) -ge $( plutil -extract "listitem" raw -o - "$TRACKER_JSON" ) ]; do
-     if [ "$( jq 'listitem[.currentitem].success' )" != "success" ]; then
+     logIt "Running Task $( jq 'currentitem' )"
+     if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
       trackIt "$( jq 'listitem[.currentitem].commandtype' )" \
        "$( jq 'listitem[.currentitem].command' )" \
        "$( jq 'listitem[.currentitem].successtype' )" \
        "$( jq 'listitem[.currentitem].successtest' )" \
        "$( jq 'listitem[.currentitem].successteam' )"
-      case "$( jq 'listitem[.currentitem].success' )" in
+      case "$( jq 'listitem[.currentitem].status' )" in
        success)
         ((SUCCESS_COUNT++))
-        eval "track string infobox '$INFOBOX'"
+        infoBox
        ;;
        fail)
-        FAILED=true
-        if [ $COUNT -eq 10 ]; then
+        FAILED=false
+        if [ $COUNT -eq $PER_APP ]; then
          track update commandtype "$( jq 'listitem[.currentitem].backuptype' )"
          track update command "$( jq 'listitem[.currentitem].backupcommand' )"
+         COMMAND="$( jq 'listitem[.currentitem].backupcommand' )"
+         case $COMMAND in
+          policy)
+           COMMAND="Jamf Event - $COMMAND"
+          ;;
+          install)
+           COMMAND="Installomator Label - $COMMAND"
+          ;;
+         esac
          case "$( jq 'listitem[.currentitem].subtitletype' )" in
           command)
-           track update subtitle "$( jq 'listitem[.currentitem].backupcommand' )"
+           track update subtitle "$COMMAND"
           ;;
           combine)
-           track update subtitle "$( jq 'listitem[.currentitem].suppliedsubtitle' ) - $( jq 'listitem[.currentitem].backupcommand' )"
+           track update subtitle "$( jq 'listitem[.currentitem].suppliedsubtitle' ) - $COMMAND"
           ;;
          esac
         fi
@@ -763,31 +882,35 @@ case $1 in
      track integer currentitem $(($( jq 'currentitem' )+1))
     done
     ((COUNT++))
-    if ! $FAILED || [ "$( date "+%s" )" -gt $FINISH_TIME ]; then
-     $FINISHED=true
-    fi
    done
-   SUCCESS_COUNT=0
+   FULLSUCCESS_COUNT=0
    FAILED_COUNT=0
    track integer currentitem 0
    until [ $( jq 'currentitem' ) -ge $( plutil -extract "listitem" raw -o - "$TRACKER_JSON" ) ]; do
-    case "$( jq 'listitem[.currentitem].success' )" in
+    case "$( jq 'listitem[.currentitem].status' )" in
      pending)
-      track update success success
+      track update status success
      ;&
      success)
-      ((SUCCESS_COUNT++))
+      ((FULLSUCCESS_COUNT++))
      ;;
      fail)
       ((FAILED_COUNT++))
-      track update success error
+      track update status error
      ;;
     esac
+    track integer currentitem $(($( jq 'currentitem' )+1))
    done
-   logIt "Success: $SUCCESS_COUNT, Failed: $FAILED_COUNT"
+   infoBox
+   logIt "Success: $FULLSUCCESS_COUNT, Installs: $SUCCESS_COUNT, Failed: $FAILED_COUNT"
   fi
   # Time to send email and finish.
-  
+
+  # disable automatic login if our TEMP_ADMIN is still configured
+  if [ "$( defaults read /Library/Preferences/com.apple.loginwindow.plist autoLoginUser 2>/dev/null )" = "$TEMP_ADMIN" ]; then
+   runIt "defaults delete /Library/Preferences/com.apple.loginwindow.plist autoLoginUser"
+   rm -f /etc/kcpassword
+  fi
  ;;
  cleanUp)
   # A clean up routine
@@ -800,10 +923,12 @@ case $1 in
   eval "rm -rf $CLEANUP_FILES"
  ;;
  *)
+  logIt "TEMP_ADMIN = $TEMP_ADMIN"
+  runIt "defaults read /Library/Preferences/com.apple.loginwindow.plist autoLoginUser 2>/dev/null"
   if [ "$( defaults read /Library/Preferences/com.apple.loginwindow.plist autoLoginUser 2>/dev/null )" = "$TEMP_ADMIN" ]; then
-   "$C_ENROLMENT" process >> /dev/null 2>&1
+   runIt "'$C_ENROLMENT' process >> /dev/null 2>&1"
   else
-   "$C_ENROLMENT" cleanUp >> /dev/null 2>&1
+   runIt "'$C_ENROLMENT' cleanUp >> /dev/null 2>&1"
   fi
  ;;
 esac

@@ -120,7 +120,7 @@
   },
   "policyInstallomator": {
    "title": "Jamf policy for installing Installomator",
-   "description": "Jamf policy name used to install Installomator, Installomator us used by enrollmentComplete to help with installing other tools like mkuser and swiftDialog. Installomator has a script available for Jamf to manage the install of Installomator. Defaults to installInstallomator.",
+   "description": "Jamf policy name used to install Installomator, Installomator us used by ompleteEnrolment to help with installing other tools like mkuser and swiftDialog. Installomator has a script available for Jamf to manage the install of Installomator. Defaults to installInstallomator.",
    "type": "string"
   },
   "policyInitialFiles": {
@@ -158,26 +158,6 @@
    "title": "Second count for how long to wait for a response",
    "description": "When performing a manual enrollment, if we ask to continue, how long should we wait for a response. Default is 0 (no timeout).",
    "type": "integer"
-  },
-  "finalTextOne": {
-   "title": "The first line of the login window text to finish with",
-   "description": "The script updates the login window text periodically, this will be the first line of what the script finishes with to show it has finished.",
-   "type": "string",
-   "options": {
-    "inputAttributes": {
-     "placeholder": "This computer is managed by Jamf Pro."
-    }
-   }
-  },
-  "finalTextTwo": {
-   "title": "The second line of the login window text to finish with",
-   "description": "The script updates the login window text periodically, this will be the second line of what the script finishes with to show it has finished.",
-   "type": "string",
-   "options": {
-    "inputAttributes": {
-     "placeholder": "Please contact the Service Desk for all support queries."
-    }
-   }
   },
   "emailFrom": {
    "title": "Email address to send emails From",
@@ -219,14 +199,9 @@
    "description": "The script can send emails on completion or errors, including the ability to send them via an authenticated SMTP server. This is for the authentication email address to send the emails from. Defaults to From address.",
    "type": "string"
   },
-  "appLIST": {
-   "title": "Full path to a txt file whose contents should have been built by OnBoarded-Checklist",
-   "description": "The script can send emails on completion or errors. This allows a list of installed applications to be included, or the log file. For the log file enter log here. Defaults to not including a file.",
-   "type": "string"
-  },
   "perAPP": {
    "title": "Time out for Installation Status dialog",
-   "description": "When using monitoring the installation status of applications, obviously the dialog should not wait forever, therefore the script will calculate a timeout based on this number of minutes per application to monitor. i.e 5 minutes per app for 5 apps will mean the Installation Status dialog will timeout after 25 minutes. This will also set the wait time the dialog will wait for someone to click done (after all apps are installed). Requires the application list to be included. Default is 5 Minutes.",
+   "description": "When monitoring the installation status of applications, obviously the dialog should not wait forever, therefore the script will calculate a timeout based on this number of minutes per tast to monitor. i.e 5 minutes per task for 5 tasks will mean the Installation Status dialog will timeout after 25 minutes. This will also set the wait time the dialog will wait for someone to click done (after all apps are installed), and the number of failures required before switching to the backup install method (if configured for an install task). Requires the installs list to be included. Default is 5 Minutes.",
    "type": "integer",
    "enum": [
     2,
