@@ -139,8 +139,8 @@
    "type": "string"
   },
   "policyADBind": {
-   "title": "Jamf policy for binding to Active Directory",
-   "description": "Jamf policy name used to bind the computer to Active Directory. Defaults to adBind.",
+   "title": "Jamf policy for setting up your identity provider or binding to Active Directory",
+   "description": "Jamf policy name used to set up Platform SSO or bind the computer to Active Directory. Defaults to adBind. Also use this to create the user account or start Migration Assistant",
    "type": "string"
   },
   "manualContinue": {

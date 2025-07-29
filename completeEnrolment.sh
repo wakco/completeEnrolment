@@ -139,8 +139,8 @@ infoBox() {
  if [ "$FINISH_TIME" != "" ]; then
   INFOBOX+="**Estimated Finish:**  <br>$( date -jr "$FINISH_TIME" "+%d/%m/%Y %H:%M" )  <br><br>"
  fi
- if [ "$NEW_INDEX" != "" ]; then
-  INFOBOX+="**Apps to Install:** $NEW_INDEX  <br><br>"
+ if [ "$( jq 'installCount' )" != "" ]; then
+  INFOBOX+="**Apps to Install:** $( jq 'installCount' )  <br><br>"
  fi
  if [ "$SUCCESS_COUNT" != "" ]; then
   INFOBOX+="**Installed:** $SUCCESS_COUNT  <br><br>"
@@ -152,7 +152,7 @@ infoBox() {
   INFOBOX+="**Completed Tasks:** $FULLSUCCESS_COUNT  <br><br>"
  fi
  track string infobox "$INFOBOX"
- plutil replace infobox -string "$INFOBOX" "$LOG_JSON"
+ plutil -replace infobox -string "$INFOBOX" "$LOG_JSON"
  if [ ! -e "$TRACKER_RUNNING" ]; then
   echo "infobox: $INFOBOX" >> "$TRACKER_COMMAND"
   sleep 0.1
@@ -203,9 +203,10 @@ trackIt() {
  track update status wait
  case $3 in
   stamp)
-   if [ "$RECON_DATE" = "" ] || [ $RECON_DATE -gt $(($RECON_DATE+$PER_APP*60)) ]; then
+   if [ "$RECON_DATE" = "" ]; then
     RECON_DATE=$( date "+%s" )
-   else
+   elif [ $RECON_DATE -lt $(($RECON_DATE+$PER_APP*60)) ]; then
+    track update status pending
     return 0
    fi
   ;&
@@ -239,13 +240,18 @@ trackIt() {
  esac
  THE_RESULT=$?
  case $3 in
+  stamp)
+   if [ $RECON_DATE -ge $(($RECON_DATE+$PER_APP*60)) ]; then
+    RECON_DATE=$( date "+%s" )
+   fi
+  ;&
   date)
-   track update statustext "Last Updated - $(date)"
+   track update statustext "Last Updated - $( date "+%Y-%m-%d %H-%M-%S %Z" )"
   ;|
   pause)
    track update statustext "Resumed."
   ;|
-  date|pause)
+  stamp|date|pause)
    track update status pending
    return 0
   ;;
@@ -347,6 +353,7 @@ trackNow() {
 
 caffeinate -dimsuw $$ &
 
+# dono't do anything without a config file
 until [ -e "$DEFAULTS_FILE" ]; do
  sleep 1
 done
@@ -567,7 +574,7 @@ case $1 in
     # perform a recon
     trackNow "Updating Inventory" \
      command "'$C_JAMF' recon" \
-     test true
+     date
 
     # install mkuser
     trackNow "Installing mkuser" \
@@ -610,7 +617,7 @@ case $1 in
   # to open the event tracking dialog
   TRACKER=true
   echo > "$TRACKER_COMMAND"
-  until [[ "$( tail -n1 "$TRACKER_COMMAND" )" = "quit:" ]]; do
+  until [[ "$( tail -n1 "$TRACKER_COMMAND" )" = "end:" ]]; do
    if $TRACKER; then
     touch "$TRACKER_RUNNING"
     logIt "Starting Progress Dialog..."
@@ -668,6 +675,7 @@ case $1 in
    track update status success
    launchctl bootout gui/$( id -u $WHO_LOGGED )/com.apple.Dock.agent
    launchctl bootout gui/$( id -u $WHO_LOGGED )/com.apple.Finder
+   sleep 5
   fi
   
   # Start Tracker dialog
@@ -676,90 +684,94 @@ case $1 in
   fi
   sleep 5
   
-  # finishing setting up admin accounts
-  # Add JSS ADMIN
-  # This will load the $JAMF_ADMIN and $JAMF_PASS login details
-  JAMF_AUTH_TOKEN="$( echo "$( curl -s --location --request POST "${JAMF_URL}api/oauth/token" \
-   --header 'Content-Type: application/x-www-form-urlencoded' \
-   --data-urlencode "client_id=$( readSaved apiId )" \
-   --data-urlencode 'grant_type=client_credentials' \
-   --data-urlencode "client_secret=$( readSaved apiSecret )" )" | /usr/bin/jq -Mr ".access_token" )"
-  if [[ "$JAMF_AUTH_TOKEN" = *httpStatus* ]]; then
-   "$C_DIALOG" --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to login to Jamf Pro API"
-   errorIt 2 "This should not have happened, are the API ID/Secret details correct?\nResponse from $JAMF_URL:\n$JAMF_AUTH_TOKEN"
-  fi
-  sleep 1
-
-  JAMF_ACCOUNTS="$( curl -s "${JAMF_URL}api/v2/local-admin-password/$( defaultRead managementID )/accounts" \
-   -H "accept: application/json" -H "Authorization: Bearer $JAMF_AUTH_TOKEN" )"
-  logIt "checking for JMF account in:\n$JAMF_ACCOUNTS\n"
-  for (( i = 0; i < $( readJSON "$JAMF_ACCOUNTS" "totalCount" ); i++ )); do
-   if [ "$( readJSON "$JAMF_ACCOUNTS" "results[$i].userSource" )" = "JMF" ]; then
-    JAMF_ADMIN="$( readJSON "$JAMF_ACCOUNTS" "results[$i].username" )"
-    JAMF_GUID="$( readJSON "$JAMF_ACCOUNTS" "results[$i].guid" )"
-    break
-   fi
-  done
-  if [ -z "$JAMF_ADMIN" ] || [ -z "$JAMF_GUID" ]; then
-   "$C_DIALOG" --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account username from Jamf Pro API"
-   errorIt 2 "this should not have happened, unable to get Jamf Managed Account Details:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
-  fi
-  sleep 1
-
-  JAMF_PASS="$( readJSON "$( curl -s "${JAMF_URL}api/v2/local-admin-password/$( defaultRead managementID )/account/$JAMF_ADMIN/$JAMF_GUID/password" \
-   -H "accept: application/json" -H "Authorization: Bearer $JAMF_AUTH_TOKEN" )" "password" )"
-  if [ -z "$JAMF_PASS" ]; then
-   "$C_DIALOG" --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account password from Jamf Pro API"
-   errorIt 2 "this should not have happened, unable to get Jamf Managed Account Password:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
-  fi
-
-  trackNow "Creating $JAMF_ADMIN Account" \
-  secure "'$C_MKUSER' --username $JAMF_ADMIN --password '$JAMF_PASS' --real-name '$JAMF_ADMIN Account' --home /private/var/$JAMF_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes --secure-token-admin-account-name '$TEMP_ADMIN' --secure-token-admin-password '$( readSaved temp )'" "Creating username $JAMF_ADMIN" \
-   file "/private/var/$JAMF_ADMIN"
-  # Add or update LAPS ADMIN
-  if [ -e "/Users/$LAPS_ADMIN" ]; then
-   trackNow "Securing $LAPS_NAME Account" \
-    secure "dscl . change '/Users/$LAPS_ADMIN' NFSHomeDirectory '/Users/$LAPS_ADMIN' '/private/var/$LAPS_ADMIN' ; mv '/Users/$LAPS_ADMIN' '/private/var/$LAPS_ADMIN' ; sysadminctl -secureTokenOn '"$LAPS_ADMIN"' -password '$( readSaved laps )' -adminUser '$TEMP_ADMIN' -adminPassword '$( readSaved temp )'" "Moving and securing $LAPS_ADMIN"\
-    result
-
-  else
-   trackNow "Creating $LAPS_NAME Account" \
-    secure "'$C_MKUSER' --username $LAPS_ADMIN --password '$( readSaved laps )' --real-name '$LAPS_NAME' --home /private/var/$LAPS_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes --secure-token-admin-account-name '$TEMP_ADMIN' --secure-token-admin-password '$( readSaved temp )'" "Creating username $LAPS_ADMIN" \
-    file "/private/var/$LAPS_ADMIN"
-  fi
- 
-  if [ "$( defaults read "$DEFAULTS_FILE" installs 2>/dev/null )" != "" ]; then
-     
-   track new "Task List"
-   track update status pending
-   track update statustext "Loading..."
-   track update subtitle "Loading the task list from the config profile."
-   # Identify index of first cycling check item, until now each item would retry automatically
-   #  immediately for up to 5 time, now we want to switch to trying everything else before retrying,
-   #  and keep going until everything is successful, or a specified timeout (at 5 minutes per item?).
-   TRACKER_START=${$( jq 'currentitem' ):--1}
-   track integer startitem $((TRACKER_START+1))
+  if [ "$( jq 'installCount' )" = "" ]; then
+   # skip this if the computer has been restarted...
    
-   # load software installs
-   NEW_INDEX=0
+   # finishing setting up admin accounts
+   # Add JSS ADMIN
+   # This will load the $JAMF_ADMIN and $JAMF_PASS login details
+   JAMF_AUTH_TOKEN="$( echo "$( curl -s --location --request POST "${JAMF_URL}api/oauth/token" \
+    --header 'Content-Type: application/x-www-form-urlencoded' \
+    --data-urlencode "client_id=$( readSaved apiId )" \
+    --data-urlencode 'grant_type=client_credentials' \
+    --data-urlencode "client_secret=$( readSaved apiSecret )" )" | /usr/bin/jq -Mr ".access_token" )"
+   if [[ "$JAMF_AUTH_TOKEN" = *httpStatus* ]]; then
+    "$C_DIALOG" --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to login to Jamf Pro API"
+    errorIt 2 "This should not have happened, are the API ID/Secret details correct?\nResponse from $JAMF_URL:\n$JAMF_AUTH_TOKEN"
+   fi
+   sleep 1
+
+   JAMF_ACCOUNTS="$( curl -s "${JAMF_URL}api/v2/local-admin-password/$( defaultRead managementID )/accounts" \
+    -H "accept: application/json" -H "Authorization: Bearer $JAMF_AUTH_TOKEN" )"
+   logIt "checking for JMF account in:\n$JAMF_ACCOUNTS\n"
+   for (( i = 0; i < $( readJSON "$JAMF_ACCOUNTS" "totalCount" ); i++ )); do
+    if [ "$( readJSON "$JAMF_ACCOUNTS" "results[$i].userSource" )" = "JMF" ]; then
+     JAMF_ADMIN="$( readJSON "$JAMF_ACCOUNTS" "results[$i].username" )"
+     JAMF_GUID="$( readJSON "$JAMF_ACCOUNTS" "results[$i].guid" )"
+     break
+    fi
+   done
+   if [ -z "$JAMF_ADMIN" ] || [ -z "$JAMF_GUID" ]; then
+    "$C_DIALOG" --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account username from Jamf Pro API"
+    errorIt 2 "this should not have happened, unable to get Jamf Managed Account Details:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
+   fi
+   sleep 1
+
+   JAMF_PASS="$( readJSON "$( curl -s "${JAMF_URL}api/v2/local-admin-password/$( defaultRead managementID )/account/$JAMF_ADMIN/$JAMF_GUID/password" \
+    -H "accept: application/json" -H "Authorization: Bearer $JAMF_AUTH_TOKEN" )" "password" )"
+   if [ -z "$JAMF_PASS" ]; then
+    "$C_DIALOG" --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account password from Jamf Pro API"
+    errorIt 2 "this should not have happened, unable to get Jamf Managed Account Password:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
+   fi
+
+   trackNow "Creating $JAMF_ADMIN Account" \
+   secure "'$C_MKUSER' --username $JAMF_ADMIN --password '$JAMF_PASS' --real-name '$JAMF_ADMIN Account' --home /private/var/$JAMF_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes --secure-token-admin-account-name '$TEMP_ADMIN' --secure-token-admin-password '$( readSaved temp )'" "Creating username $JAMF_ADMIN" \
+    file "/private/var/$JAMF_ADMIN"
+   # Add or update LAPS ADMIN
+   if [ -e "/Users/$LAPS_ADMIN" ]; then
+    trackNow "Securing $LAPS_NAME Account" \
+     secure "dscl . change '/Users/$LAPS_ADMIN' NFSHomeDirectory '/Users/$LAPS_ADMIN' '/private/var/$LAPS_ADMIN' ; mv '/Users/$LAPS_ADMIN' '/private/var/$LAPS_ADMIN' ; sysadminctl -secureTokenOn '"$LAPS_ADMIN"' -password '$( readSaved laps )' -adminUser '$TEMP_ADMIN' -adminPassword '$( readSaved temp )'" "Moving and securing $LAPS_ADMIN"\
+     result
+
+   else
+    trackNow "Creating $LAPS_NAME Account" \
+     secure "'$C_MKUSER' --username $LAPS_ADMIN --password '$( readSaved laps )' --real-name '$LAPS_NAME' --home /private/var/$LAPS_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes --secure-token-admin-account-name '$TEMP_ADMIN' --secure-token-admin-password '$( readSaved temp )'" "Creating username $LAPS_ADMIN" \
+     file "/private/var/$LAPS_ADMIN"
+   fi
+  fi
+  
+  if [ "$( defaults read "$DEFAULTS_FILE" installs 2>/dev/null )" != "" ]; then
+   if [ "$( jq 'installCount' )" = "" ]; then
+    track new "Task List"
+    track update status pending
+    track update statustext "Loading..."
+    track update subtitle "Loading the task list from the config profile."
+    # Identify index of first cycling check item, until now each item would retry automatically
+    #  immediately for up to 5 time, now we want to switch to trying everything else before retrying,
+    #  and keep going until everything is successful, or a specified timeout (at 5 minutes per item?).
+    track integer trackitem ${$( jq 'currentitem' ):--1}
+    track integer startitem $(($( jq 'trackitem' )+1))
+    
+    # load software installs
+    track integer 'installCount' 0
+    track update status wait
+   fi
+
    infoBox
-   track update status wait
-   until [ $NEW_INDEX -ge $( listRead "installs" ) ]; do
+   until [ $( jq 'installCount' ) -ge $( listRead 'installs' ) ]; do
     # Cheating by using TRACKER_START to update the Task List loading entry
-    plutil -replace listitem.$TRACKER_START.statustext -string "Loading task #$((NEW_INDEX+1))" "$LOG_JSON"
-    echo "listitem: index: $TRACKER_START, statustext: Loading task #$((NEW_INDEX+1))"
+    plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loading task #$(($( jq 'installCount' )+1))" "$LOG_JSON"
+    echo "listitem: index: $( jq 'trackitem' ), statustext: Loading task #$(($( jq 'installCount' )+1))"
     sleep 0.1
     
     # for each item in config profile
-    track new "$( listRead "installs.$NEW_INDEX.title" )"
-    COMMAND="$( listRead "installs.$NEW_INDEX.command" )"
+    track new "$( listRead "installs.$( jq 'installCount' ).title" )"
+    COMMAND="$( listRead "installs.$( jq 'installCount' ).command" )"
     track update command "$COMMAND"
-    track update commandtype "$( listRead "installs.$NEW_INDEX.commandtype" )"
-    SUBTITLE="$( listRead "installs.$NEW_INDEX.subtitle" )"
-    track update suppliedsubtitle "$SUBTITLE"
-    SUBTITLE_TYPE="$( listRead "installs.$NEW_INDEX.subtitletype" )"
-    track update subtitletype "$SUBTITLE_TYPE"
-    case $COMMAND in
+    track update commandtype "$( listRead "installs.$( jq 'installCount' ).commandtype" )"
+    track update suppliedsubtitle "$( listRead "installs.$( jq 'installCount' ).subtitle" )"
+    track update subtitletype "$( listRead "installs.$( jq 'installCount' ).subtitletype" )"
+    case "$( jq 'listitem[.currentitem].commandtype' )" in
      policy)
       COMMAND="Jamf Event - $COMMAND"
      ;;
@@ -767,22 +779,22 @@ case $1 in
       COMMAND="Installomator Label - $COMMAND"
      ;;
     esac
-    case $SUBTITLE_TYPE in
+    case "$( jq 'listitem[.currentitem].subtitletype' )" in
      secure)
-      track update subtitle "$SUBTITLE"
+      track update subtitle "$( jq 'listitem[.currentitem].suppliedsubtitle' )"
      ;;
      command)
       track update subtitle "$COMMAND"
      ;;
      combine)
-      track update subtitle "$SUBTITLE - $COMMAND"
+      track update subtitle "$( jq 'listitem[.currentitem].suppliedsubtitle' ) - $COMMAND"
      ;;
     esac
-    track update successtype "$( listRead "installs.$NEW_INDEX.successtype" )"
-    track update successtest "$( listRead "installs.$NEW_INDEX.successtest" )"
-    track update successteam "$( listRead "installs.$NEW_INDEX.successteam" )"
-    track update subtitle "$( listRead "installs.$NEW_INDEX.subtitle" )"
-    THE_ICON="$( listRead "installs.$NEW_INDEX.icon" )"
+    track update successtype "$( listRead "installs.$( jq 'installCount' ).successtype" )"
+    track update successtest "$( listRead "installs.$( jq 'installCount' ).successtest" )"
+    track update successteam "$( listRead "installs.$( jq 'installCount' ).successteam" )"
+    track update subtitle "$( listRead "installs.$( jq 'installCount' ).subtitle" )"
+    THE_ICON="$( listRead "installs.$( jq 'installCount' ).icon" )"
     if [ "$THE_ICON" = "" ]; then
      track update icon none
     else
@@ -793,7 +805,7 @@ case $1 in
        #  the downloaded copy makes much more sense.
        ICON_NAME="$CACHE/$( basename "$THE_ICON" )"
        runIt "curl -s -o '$ICON_NAME' '$THE_ICON'"
-       THE_ICON="$CACHE/icon-$NEW_INDEX-$( js 'currentitem' ).png"
+       THE_ICON="$CACHE/icon-$( jq 'installCount' )-$( js 'currentitem' ).png"
        runIt "sips -s format png '$ICON_NAME' --out '$THE_ICON'"
       ;&
       *)
@@ -801,48 +813,49 @@ case $1 in
       ;;
      esac
     fi
-    track update backuptype "$( listRead "installs.$NEW_INDEX.backuptype" )"
-    track update backupcommand "$( listRead "installs.$NEW_INDEX.backupcommand" )"
+    track update backuptype "$( listRead "installs.$( jq 'installCount' ).backuptype" )"
+    track update backupcommand "$( listRead "installs.$( jq 'installCount' ).backupcommand" )"
     track update status pending
     track update statustext "waiting to install..."
     infoBox
-    ((NEW_INDEX++))
+    track integer installCount $(($( jq 'installCount' )+1))
    done
-   track new "Pause for 30 seconds"
-   track update command "sleep 30"
-   track update commandtype command
-   track update subtitle "Pause for 30 seconds before checking again."
-   track update successtype "pause"
-   track new "Inventory Update"
-   track update command "'$C_JAMF' recon"
-   track update commandtype command
-   track update subtitle "Updates inventory once every $PER_APP minutes"
-   track update successtype "stamp"
+
+   # [ $( jq 'currentitem' ) -ge $( plutil -extract "listitem" raw -o - "$TRACKER_JSON" ) ]  $( listRead "installs" )
+   if [ (($( jq 'startitem' )+$( listRead 'installs' ))) -eq $( plutil -extract "listitem" raw -o - "$TRACKER_JSON" ) ]; then
+    track new "Pause for 30 seconds"
+    track update command "sleep 30"
+    track update commandtype command
+    track update subtitle "Pause for 30 seconds before checking again."
+    track update successtype "pause"
+   fi
+   if [ (($( jq 'startitem' )+$( listRead 'installs' )+1)) -eq $( plutil -extract "listitem" raw -o - "$TRACKER_JSON" ) ]; then
+    track new "Inventory Update"
+    track update command "'$C_JAMF' recon"
+    track update commandtype command
+    track update subtitle "Updates inventory once every $PER_APP minutes"
+    track update successtype "stamp"
+   fi
    
-   # Restart dialog (just to make sure it got everything).
-#   dialog --ontop --timer 15 --title "Reloading..." --message "Reloading the tracking dialog..." --icon none --button1disabled --width 400 --height 150 &
    sleep 2
-#   echo "quit:" >> "$TRACKER_COMMAND"
-#   sleep 5
-#   runIt "'$C_ENROLMENT' startDialog >> /dev/null 2>&1 &"
-#   sleep 5
-   plutil -replace listitem.$TRACKER_START.statustext -string "Loaded" "$TRACKER_JSON"
-   echo "listitem: index: $TRACKER_START, statustext: Loaded" >> "$TRACKER_COMMAND"
+   
+   plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loaded" "$TRACKER_JSON"
+   echo "listitem: index: $( jq 'trackitem' ), statustext: Loaded" >> "$TRACKER_COMMAND"
    sleep 0.1
-   plutil -replace listitem.$TRACKER_START.status -string "success" "$TRACKER_JSON"
-   echo "listitem: index: $TRACKER_START, status: success" >> "$TRACKER_COMMAND"
+   plutil -replace listitem.$( jq 'trackitem' ).status -string "success" "$TRACKER_JSON"
+   echo "listitem: index: $( jq 'trackitem' ), status: success" >> "$TRACKER_COMMAND"
    sleep 0.1
    
    # process software installs
-   SUCCESS_COUNT=0
    WAIT_TIME=$(($( plutil -extract "listitem" raw -o - "$TRACKER_JSON" )*$PER_APP*60))
    FINISH_TIME=$(($START_TIME+$WAIT_TIME))
    infoBox
    FINISHED=false
    COUNT=1
    logIt "Total Tasks"
-   until [ $SUCCESS_COUNT -eq $NEW_INDEX ] || [ $( date "+%s" ) -gt $FINISH_TIME ]; do
+   until [ $SUCCESS_COUNT -eq $( jq 'installCount' ) ] || [ $( date "+%s" ) -gt $FINISH_TIME ]; do
     track integer currentitem $( jq 'startitem' )
+    SUCCESS_COUNT=0
     until [ $( jq 'currentitem' ) -ge $( plutil -extract "listitem" raw -o - "$TRACKER_JSON" ) ]; do
      logIt "Running Task $( jq 'currentitem' )"
      if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
@@ -857,12 +870,11 @@ case $1 in
         infoBox
        ;;
        fail)
-        FAILED=false
         if [ $COUNT -eq $PER_APP ]; then
          track update commandtype "$( jq 'listitem[.currentitem].backuptype' )"
          track update command "$( jq 'listitem[.currentitem].backupcommand' )"
          COMMAND="$( jq 'listitem[.currentitem].backupcommand' )"
-         case $COMMAND in
+         case "$( jq 'listitem[.currentitem].backuptype' )" in
           policy)
            COMMAND="Jamf Event - $COMMAND"
           ;;
@@ -881,40 +893,70 @@ case $1 in
         fi
        ;;
       esac
+     else
+      ((SUCCESS_COUNT++))
+      infoBox
      fi
      sleep 5
      track integer currentitem $(($( jq 'currentitem' )+1))
     done
     ((COUNT++))
    done
-   FULLSUCCESS_COUNT=0
-   FAILED_COUNT=0
-   track integer currentitem 0
-   until [ $( jq 'currentitem' ) -ge $( plutil -extract "listitem" raw -o - "$TRACKER_JSON" ) ]; do
-    case "$( jq 'listitem[.currentitem].status' )" in
-     pending)
-      track update status success
-     ;&
-     success)
-      ((FULLSUCCESS_COUNT++))
-     ;;
-     fail)
-      ((FAILED_COUNT++))
-      track update status error
-     ;;
-    esac
-    track integer currentitem $(($( jq 'currentitem' )+1))
-   done
-   infoBox
-   logIt "Success: $FULLSUCCESS_COUNT, Installs: $SUCCESS_COUNT, Failed: $FAILED_COUNT"
   fi
-  # Time to send email and finish.
 
+  # connect identidy provider or bind to active directory
+  trackNow "Attaching Identity Provider (or Active Directory binding)" \
+   policy "${"$( defaultRead policyADBind )":-"adBind"}" \
+   result
+  
+  # one more recon
+  trackNow "Last Inventory Update" \
+   secure "'$C_JAMF' recon" "Updates inventory one last time" \
+   date
+
+  FULLSUCCESS_COUNT=0
+  FAILED_COUNT=0
+  track integer currentitem 0
+  until [ $( jq 'currentitem' ) -ge $( plutil -extract "listitem" raw -o - "$TRACKER_JSON" ) ]; do
+   case "$( jq 'listitem[.currentitem].status' )" in
+    pending)
+     track update status success
+    ;&
+    success)
+     ((FULLSUCCESS_COUNT++))
+    ;;
+    fail)
+     ((FAILED_COUNT++))
+     track update status error
+    ;;
+   esac
+   track integer currentitem $(($( jq 'currentitem' )+1))
+  done
+  track integer currentitem $(($( jq 'currentitem' )-1))
+  logIt "Success: $FULLSUCCESS_COUNT, Installs: $SUCCESS_COUNT, Failed: $FAILED_COUNT"
+  infoBox
+    
   # disable automatic login if our TEMP_ADMIN is still configured
   if [ "$( defaults read /Library/Preferences/com.apple.loginwindow.plist autoLoginUser 2>/dev/null )" = "$TEMP_ADMIN" ]; then
-   runIt "defaults delete /Library/Preferences/com.apple.loginwindow.plist autoLoginUser"
-   rm -f /etc/kcpassword
+   trackNow "Disable automatic login" \
+    secure "defaults delete /Library/Preferences/com.apple.loginwindow.plist autoLoginUser ; rm -f /etc/kcpassword" "Removing $TEMP_ADMIN from automatic login" \
+    result
   fi
+  
+  # Time to send email and finish.
+  
+  # Wait for user
+#  plutil -replace button2text "Finish" "$TRACKER_JSON"
+#  plutil -replace button2text "Finish" "$LOG_JSON"
+  echo "button1text: Finish" >> "$TRACKER_COMMAND"
+  sleep 0.1
+  echo "end:" >> "$TRACKER_COMMAND"
+  
+  # wait for dialog to close
+  until [ "$( pgrep "Dialog" )" = "" ]; do
+   sleep 1
+  done
+  
  ;;
  cleanUp)
   # A clean up routine
