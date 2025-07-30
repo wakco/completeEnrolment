@@ -48,6 +48,9 @@ else
  WHO_LOGGED="$( who | grep -m1 console | cut -d " " -f 1 )"
 fi
 
+# so we can use ^ for everything other than this matches in case statements
+setopt extended_glob
+
 # prefer jq
 if [ -e /usr/bin/jq ]; then
  # jq "alias"
@@ -130,14 +133,41 @@ runIt() {
  return $THE_RETURN
 }
 
+mailSend() {
+ if [ "$EMAIL_AUTH" != "" ] && [ "$EMAIL_PASS" != "" ] && [[ "$EMAIL_SMTP" = *":"* ]]; then
+  logIt "Attempting to send email with details:\nTo be sent via: $EMAIL_SMTP\nFrom: $1\nTo: ${AUTH_SMTP[@]}\nHidden by: $2\nSubject: $3\n\n$4\n"
+  curl -s -S --verbose --ssl-reqd --url "smtp://$EMAIL_SMTP" \
+     --mail-from "$1" \
+     ${AUTH_SMTP[@]} \
+     --mail-auth "$EMAIL_AUTH" \
+     --user "$EMAIL_AUTH:$( readSaved email )" \
+     -T <( echo -e "From: $1\nTo: $2\nSubject: $3\n\n$4" | sed 's/$/\r/' ) 2>&1 | tee -a "$LOG_FILE"
+ else
+  EMAIL_SMTP_HOST="$( host -t mx "$( echo $2 | cut -d '@' -f 2 )" | head -1 | cut -d ' ' -f 7 ):25"
+  if [ "$5" = "" ]; then
+   BCCMAIL="$2"
+  else
+   BCCMAIL="$5"
+  fi
+  logIt "Attempting to send email with details:\nTo be sent via: $EMAIL_SMTP_HOST\nFrom: $1\nTo: $2\nHidden by: $BCCMAIL\nSubject: $3\n\n$4\n"
+  curl -s -S --verbose --url "smtp://$EMAIL_SMTP_HOST" \
+    	--mail-from "$1" \
+     --mail-rcpt "$2" \
+     -T <( echo -e "From: $1\nTo: $BCCMAIL\nSubject: $3\n\n$4" | sed 's/$/\r/' ) 2>&1 | tee -a "$LOG_FILE"
+ fi
+}
+
 infoBox() {
  INFOBOX="**macOS $( sw_vers -productversion )** on  <br>$( scutil --get ComputerName )  <br><br>"
  INFOBOX+="**Started:**  <br>$( jq startdate )  <br><br>"
  if [ "$START_TIME" != "" ]; then
-  INFOBOX+="**Restarted:**  <br>$( date -jr "$START_TIME" "+%d/%m/%Y %H:%M" )  <br><br>"
+  INFOBOX+="**Restarted:**  <br>$( date -jr "$START_TIME" "+%d/%m/%Y %H:%M %Z" )  <br><br>"
  fi
  if [ "$FINISH_TIME" != "" ]; then
-  INFOBOX+="**Estimated Finish:**  <br>$( date -jr "$FINISH_TIME" "+%d/%m/%Y %H:%M" )  <br><br>"
+  INFOBOX+="**Estimated Finish:**  <br>$( date -jr "$FINISH_TIME" "+%d/%m/%Y %H:%M %Z" )  <br><br>"
+ fi
+ if [ "$FINISHED" != "" ]; then
+  INFOBOX+="**Finished at:**  <br>$( date -jr "$FINISHED" "+%d/%m/%Y %H:%M %Z" )  <br><br>"
  fi
  if [ "$( jq 'installCount' )" != "" ]; then
   INFOBOX+="**Apps to Install:** $( jq 'installCount' )  <br><br>"
@@ -220,11 +250,14 @@ trackIt() {
    if [ COUNT = "" ]; then
     track update statustext "Running..."
    else
-    track update statustext "Attempting #$COUNT Running..."
+    track update statustext "Attempt #$COUNT Running..."
    fi
   ;;
  esac
  case $1 in
+  secure)
+   runIt "$2" "$( echo "$2" | awk -F '((|-|--secure-token-admin)(-p|-adminP)assword)' '{ print $1 }' ) ...(hidden)"
+  ;;
   command)
    runIt "$2"
   ;;
@@ -236,6 +269,9 @@ trackIt() {
   ;;
   selfService)
    runIt "launchctl asuser $( id -u $WHO_LOGGED ) open -j -a '$SELF_SERVICE' -u '$2'"
+  ;&
+  *)
+   sleep 30
   ;;
  esac
  THE_RESULT=$?
@@ -259,18 +295,20 @@ trackIt() {
    track update statustext "Confirming..."
    THE_TEST=false
   ;|
-  appstore)
-   THE_TEST="CHECKAPP=\"\$( spctl -a -vv '$4' 2>&1 )\" && [[ \"\$CHECKAPP\" = *'Mac App Store'* ]]"
-  ;|
-  teamid)
+  appstore|teamid)
    if CHECKAPP="$( spctl -a -vv "$4" 2>&1 )"; then
-    if [[ "$CHECKAPP" = *"($5)"* ]]; then
-     THE_TEST=true
-    else
-     track update status success
-     track update statustext "Completed, but Team ID ($5) didn't match installed ID ($( echo "$CHECKAPP" | awk '/origin=/ {print $NF }' | tr -d '()' ))"
-     return 0
-    fi
+    THE_TEST=true
+    case $CHECKAPP in
+     *"($5)"*)
+      RESPONSE="Installed and Verified (Team ID $5)"
+     ;;
+     *'Mac App Store'*)
+      RESPONSE="Installed via Mac App Store"
+     ;;
+     *)
+      RESPONSE="Installed, but Team ID ($5) didn't match (ID $( echo "$CHECKAPP" | awk '/origin=/ { print $NF }' | tr -d '()' ))"
+     ;;
+    esac
    fi
   ;|
   result)
@@ -285,14 +323,19 @@ trackIt() {
   *)
    if eval "$THE_TEST" 2>&1 >> "$LOG_FILE"; then
     track update status success
-    track update statustext "Completed"
+    if [ "$RESPONSE" = "" ]; then
+     track update statustext "Completed"
+    else
+     track update statustext "$RESPONSE"
+     unset RESPONSE
+    fi
     return 0
    else
     track update status fail
     if [ $COUNT = "" ]; then
-     track update statustext "Failed, waiting for next attempt..."
+     track update statustext "Failed..."
     else
-     track update statustext "Attempt #$COUNT Failed... waiting for next attempt..."
+     track update statustext "Attempt #$COUNT Failed..."
     fi
     return 1
    fi
@@ -329,18 +372,18 @@ trackNow() {
  case $2 in
   secure)
    track update subtitle "$4"
-   repeatIt command "$3" "$5" "$6"
+   repeatIt "$2" "$3" "$5" "$6"
   ;;
   policy)
    track update subtitle "Jamf Event - $3"
-   repeatIt "$2" "$3" "$4" "$5"
-  ;;
+  ;|
   install)
    track update subtitle "Installomator Label - $3"
-   repeatIt "$2" "$3" "$4" "$5"
+  ;|
+  ^(policy|install))
+   track update subtitle "$3"
   ;;
   *)
-   track update subtitle "$3"
    repeatIt "$2" "$3" "$4" "$5"
   ;;
  esac
@@ -428,7 +471,7 @@ case $1 in
   track string icon "$DIALOG_ICON"
   track string commandfile "$TRACKER_COMMAND"
   track string position "bottom"
-  track string height "75%"
+  track string height "90%"
   track string width "80%"
   track bool blurscreen true
   ditto "$TRACKER_JSON" "$LOG_JSON"
@@ -493,7 +536,6 @@ case $1 in
   # email, and API passwords). This is to allow for hopefully a more secure process, but limiting
   # the access to some of the information to say only during the first 24 hours (at least coming
   # from Jamf Pro that way).
-  setopt extended_glob
   case $WHO_LOGGED in
    _mbsetupuser)
     # Get setup quickly and start atLoginWindow for initial step tracking followed by a restart.
@@ -603,7 +645,6 @@ case $1 in
     runIt "'$C_ENROLMENT' process >> /dev/null 2>&1"
    ;;
   esac
-  unsetopt extended_glob
   if ${$( defaultReadBool emailJamfLog ):-false} ; then
    # cannot use errorIt to exit here, since 1. this is not an error, and 2. because errorIt will
    # also cleanUp
@@ -712,7 +753,7 @@ case $1 in
     fi
    done
    if [ -z "$JAMF_ADMIN" ] || [ -z "$JAMF_GUID" ]; then
-    "$C_DIALOG" --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account username from Jamf Pro API"
+    "$C_DIALOG" --ontop --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account username from Jamf Pro API"
     errorIt 2 "this should not have happened, unable to get Jamf Managed Account Details:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
    fi
    sleep 1
@@ -720,7 +761,7 @@ case $1 in
    JAMF_PASS="$( readJSON "$( curl -s "${JAMF_URL}api/v2/local-admin-password/$( defaultRead managementID )/account/$JAMF_ADMIN/$JAMF_GUID/password" \
     -H "accept: application/json" -H "Authorization: Bearer $JAMF_AUTH_TOKEN" )" "password" )"
    if [ -z "$JAMF_PASS" ]; then
-    "$C_DIALOG" --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account password from Jamf Pro API"
+    "$C_DIALOG" --ontop --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account password from Jamf Pro API"
     errorIt 2 "this should not have happened, unable to get Jamf Managed Account Password:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
    fi
 
@@ -822,14 +863,14 @@ case $1 in
    done
 
    # [ $( jq 'currentitem' ) -ge $( plutil -extract "listitem" raw -o - "$TRACKER_JSON" ) ]  $( listRead "installs" )
-   if [ (($( jq 'startitem' )+$( listRead 'installs' ))) -eq $( plutil -extract "listitem" raw -o - "$TRACKER_JSON" ) ]; then
+   if [ $(($( jq 'startitem' )+$( listRead 'installs' ))) -eq $( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" ) ]; then
     track new "Pause for 30 seconds"
     track update command "sleep 30"
     track update commandtype command
     track update subtitle "Pause for 30 seconds before checking again."
     track update successtype "pause"
    fi
-   if [ (($( jq 'startitem' )+$( listRead 'installs' )+1)) -eq $( plutil -extract "listitem" raw -o - "$TRACKER_JSON" ) ]; then
+   if [ $(($( jq 'startitem' )+$( listRead 'installs' )+1)) -eq $( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" ) ]; then
     track new "Inventory Update"
     track update command "'$C_JAMF' recon"
     track update commandtype command
@@ -847,16 +888,15 @@ case $1 in
    sleep 0.1
    
    # process software installs
-   WAIT_TIME=$(($( plutil -extract "listitem" raw -o - "$TRACKER_JSON" )*$PER_APP*60))
+   WAIT_TIME=$(($( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" )*$PER_APP*60))
    FINISH_TIME=$(($START_TIME+$WAIT_TIME))
    infoBox
-   FINISHED=false
    COUNT=1
    logIt "Total Tasks"
-   until [ $SUCCESS_COUNT -eq $( jq 'installCount' ) ] || [ $( date "+%s" ) -gt $FINISH_TIME ]; do
+   until [ "$SUCCESS_COUNT" -eq $( jq 'installCount' ) ] || [ $( date "+%s" ) -gt $FINISH_TIME ]; do
     track integer currentitem $( jq 'startitem' )
     SUCCESS_COUNT=0
-    until [ $( jq 'currentitem' ) -ge $( plutil -extract "listitem" raw -o - "$TRACKER_JSON" ) ]; do
+    until [ $( jq 'currentitem' ) -ge $( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" ) ]; do
      logIt "Running Task $( jq 'currentitem' )"
      if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
       trackIt "$( jq 'listitem[.currentitem].commandtype' )" \
@@ -902,22 +942,17 @@ case $1 in
     done
     ((COUNT++))
    done
+   track integer currentitem $(($( jq 'currentitem' )-1))
   fi
 
-  # connect identidy provider or bind to active directory
-  trackNow "Attaching Identity Provider (or Active Directory binding)" \
-   policy "${"$( defaultRead policyADBind )":-"adBind"}" \
-   result
-  
-  # one more recon
-  trackNow "Last Inventory Update" \
-   secure "'$C_JAMF' recon" "Updates inventory one last time" \
-   date
+  track new "Checking Status"
+  track update subtitle "Counting the failed/successful installations"
+  track update status wait
 
   FULLSUCCESS_COUNT=0
   FAILED_COUNT=0
   track integer currentitem 0
-  until [ $( jq 'currentitem' ) -ge $( plutil -extract "listitem" raw -o - "$TRACKER_JSON" ) ]; do
+  until [ $( jq 'currentitem' ) -ge $( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" ) ]; do
    case "$( jq 'listitem[.currentitem].status' )" in
     pending)
      track update status success
@@ -933,17 +968,134 @@ case $1 in
    track integer currentitem $(($( jq 'currentitem' )+1))
   done
   track integer currentitem $(($( jq 'currentitem' )-1))
+  track update status success
+  FINISHED="$( date )"
+  ((FULLSUCCESS_COUNT++))
   logIt "Success: $FULLSUCCESS_COUNT, Installs: $SUCCESS_COUNT, Failed: $FAILED_COUNT"
   infoBox
-    
+  
+  # Time to send email to notify staff to sort out the next step (if necessary).
+  track new "Emailing Installation Status"
+  track update status wait
+  track update statustext "Building email content..."
+  EMAIL_SUBJECT="$( scutil --get ComputerName ) has "
+  if [ $FAILED_COUNT -gt 0 ]; then
+   EMAIL_SUBJECT+="completed (with some failures)"
+  else
+   EMAIL_SUBJECT+="successfully completed"
+  fi
+  EMAIL_SUBJECT+=" $DEFAULTS_NAME from $JAMF_SERVER"
+  # swift dialog has issues with :'s and ,'s in the command file
+  track update subtitle "OSDNotification:- $EMAIL_SUBJECT"
+  EMAIL_SUBJECT="OSDNotification: $EMAIL_SUBJECT"
+  EMAIL_BODY="$( system_profiler SPHardwareDataType )\n"
+  NETWORK_INTERFACE="$( route get "$JAMF_SERVER" | grep interface | awk '{ print $NF }' )"
+  EMAIL_BODY+="      MAC Address in use: $( ifconfig "$NETWORK_INTERFACE" | grep ether | awk '{ print $NF }' )\n"
+  EMAIL_BODY+="      IP Address in use: $( ifconfig "$NETWORK_INTERFACE" | grep "inet " | awk '{ print $2 }' )\n"
+  EMAIL_BODY+="      On Network Interface: $( networksetup -listnetworkserviceorder | grep -B1 "$NETWORK_INTERFACE" )\n\n"
+  EMAIL_BODY+="Script: $0\n"
+  EMAIL_BODY+="Enrollment Started: $( jq startdate )\n"
+  EMAIL_BODY+="Last Restart:  $( date -jr "$START_TIME" "+%d/%m/%Y %H:%M %Z" )\n"
+  EMAIL_BODY+="Estimated Finish:  $( date -jr "$FINISH_TIME" "+%d/%m/%Y %H:%M %Z" )\n"
+  EMAIL_BODY+="Finished at: $( date -jr "$FINISHED" "+%d/%m/%Y %H:%M %Z" )\n"
+  EMAIL_BODY+="Apps to Install: $( jq 'installCount' )\n"
+  INFOBOX+="Installed: $SUCCESS_COUNT\n"
+  INFOBOX+="Failed: $FAILED_COUNT\n"
+  INFOBOX+="Completed Tasks: $FULLSUCCESS_COUNT\n"
+  EMAIL_BODY+="\n"
+  EMAIL_BODY+="The lnitial log is available at ${JAMF_URL}computers.html?id=$( defaultRead jssID )&o=r&v=history, with full logs available in the /Library/Logs folder on the computer.\n"
+  EMAIL_BODY+="Please review the logs and contact ${"$( defaultRead serviceName )":-"Service Management"} if any assistance is required.\n\n\n"
+
+  track integer currentitem 0
+  until [ $( jq 'currentitem' ) -ge $(($( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" )-1)) ]; do
+   EMAIL_BODY+="Task: $( jq 'listitem[.currentitem].title' ) --- Final Status: $( jq 'listitem[.currentitem].status' )\n"
+   EMAIL_BODY+="----- $( jq 'listitem[.currentitem].subtitle' ) --- $( jq 'listitem[.currentitem].statustext' )\n"
+   track integer currentitem $(($( jq 'currentitem' )+1))
+  done
+#  track integer currentitem $(($( jq 'currentitem' )-1))
+  trackupdate statustext "Identifying where to email..."
+  EMAIL_FROM="${"$( defaultRead emailFrom )":-""}"
+  EMAIL_TO="${"$( defaultRead emailTo )":-""}"
+  EMAIL_ERR="${"$( defaultRead emailErrors )":-""}"
+  EMAIL_BCC="${"$( defaultRead emailBCC )":-""}"
+  EMAIL_HIDDEN="${"$( defaultRead emailBCCFiller )":-"$EMAIL_FROM"}"
+  EMAIL_SMTP="${"$( defaultRead emailSMTP )":-""}"
+  EMAIL_AUTH="${"$( defaultRead emailAUTH )":-"$EMAIL_FROM"}"
+  logIt "Configured Email Details (if being sent):\nTo be sent via: $EMAIL_SMTP\nFrom: $EMAIL_FROM\nTo: $EMAIL_TO\nError: $EMAIL_ERR\nBCC: $EMAIL_BCC\nHidden by: $EMAIL_HIDDEN\nSubject: $EMAIL_SUBJECT\n\n$EMAIL_BODY\n"
+
+  if [ "$EMAIL_AUTH" != "" ] && [ "$( readSaved email )" != "" ] && [[ "$EMAIL_SMTP" = *":"* ]]; then
+   if [ "$EMAIL_FROM" != "" ] && [ "$EMAIL_SUBJECT" != "" ]; then
+    logIt "From, and Subject is configured, attempting to send emails"
+    AUTH_SMTP=()
+    if [ "$EMAIL_TO" != "" ]; then
+     logIt "To address configured"
+     AUTH_SMTP+=( "--mail-rcpt" )
+     AUTH_SMTP+=( "$EMAIL_TO" )
+    fi
+    if [ "$EMAIL_ERR" != "" ] && [ "$1" -gt 0 ]; then
+     logIt "Error address configured"
+     AUTH_SMTP+=( "--mail-rcpt" )
+     AUTH_SMTP+=( "$EMAIL_ERR" )
+    fi
+    if [ "$EMAIL_BCC" != "" ]; then
+     logIt "BCC address configured"
+     AUTH_SMTP+=( "--mail-rcpt" )
+     AUTH_SMTP+=( "$EMAIL_BCC" )
+    fi
+    if [[ "$AUTH_SMTP" = *"--mail-rcpt"* ]]; then
+     logIt "Sending email"
+     track update statustext "Sending email"
+     mailSend "$EMAIL_FROM" "$EMAIL_HIDDEN" "$EMAIL_SUBJECT" "$EMAIL_BODY"
+     MAIL_RESULT=$?
+    fi
+   fi
+  else
+   if [ "$EMAIL_FROM" != "" ] && [ "$EMAIL_SUBJECT" != "" ]; then
+    logIt "From, and Subject is configured, attempting to send emails"
+    if [ "$EMAIL_TO" != "" ]; then
+     track update statustext "To address configured, sending email"
+     mailSend "$EMAIL_FROM" "$EMAIL_TO" "$EMAIL_SUBJECT" "$EMAIL_BODY" "$EMAIL_HIDDEN"
+     TO_RESULT=$?
+     sleep 5
+    fi
+    if [ "$EMAIL_ERR" != "" ] && [ "$FAILURE_COUNT" -gt 0 ]; then
+     track update statustext "Error address configured, sending email"
+     mailSend "$EMAIL_FROM" "$EMAIL_ERR" "$EMAIL_SUBJECT" "$EMAIL_BODY" "$EMAIL_HIDDEN"
+     ERR_RESULT=$?
+     sleep 5
+    fi
+    if [ "$EMAIL_BCC" != "" ]; then
+     track update statustext "BCC address configured, sending email"
+     mailSend "$EMAIL_FROM" "$EMAIL_BCC" "$EMAIL_SUBJECT" "$EMAIL_BODY" "$EMAIL_HIDDEN"
+     BCC_RESULT=$?
+    fi
+   fi
+  fi
+  
+  if [ "$MAIL_RESULT" -gt 0 ] || [ "$TO_RESULT" -gt 0 ] || [ "$ERR_RESULT" -gt 0 ] || [ "$BCC_RESULT" -gt 0 ]; then
+   track update statustext "An email failed to send, see log"
+   track update status error
+  else
+   track update statustext "Email(s) sent"
+   track update status success
+  fi
+
   # disable automatic login if our TEMP_ADMIN is still configured
   if [ "$( defaults read /Library/Preferences/com.apple.loginwindow.plist autoLoginUser 2>/dev/null )" = "$TEMP_ADMIN" ]; then
    trackNow "Disable automatic login" \
     secure "defaults delete /Library/Preferences/com.apple.loginwindow.plist autoLoginUser ; rm -f /etc/kcpassword" "Removing $TEMP_ADMIN from automatic login" \
     result
   fi
+
+  # connect identidy provider or bind to active directory
+  trackNow "Attaching Identity Provider (or Active Directory binding)" \
+   policy "${"$( defaultRead policyADBind )":-"adBind"}" \
+   result
   
-  # Time to send email and finish.
+  # one more recon
+  trackNow "Last Inventory Update" \
+   secure "'$C_JAMF' recon" "Updates inventory one last time" \
+   date
   
   # Wait for user
 #  plutil -replace button2text "Finish" "$TRACKER_JSON"
@@ -963,13 +1115,14 @@ case $1 in
   if ${$( defaultReadBool tempKeep ):-false}; then
    TEMP_ADMIN="${"$( defaultRead tempAdmin )":-"setup_admin"}"
    logIt "Removing $TEMP_ADMIN as no longer required."
-   sysadminctl -deleteUser "$TEMP_ADMIN" -adminUser "$TEMP_ADMIN" -adminPassword "$( readSaved laps )" >> "$LOG_FILE" 2>&1
+   runIt "sysadminctl -deleteUser '$TEMP_ADMIN' -adminUser '$TEMP_ADMIN' -adminPassword '$( readSaved laps )'" "Delete user '$TEMP_ADMIN'"
   fi
   logIt "Removing: $CLEANUP_FILES"
   eval "rm -rf $CLEANUP_FILES"
  ;;
  *)
   logIt "TEMP_ADMIN = $TEMP_ADMIN"
+  logIt "WHO_LOGGED = $WHO_LOGGED"
   runIt "defaults read /Library/Preferences/com.apple.loginwindow.plist autoLoginUser 2>/dev/null"
   if [ "$( defaults read /Library/Preferences/com.apple.loginwindow.plist autoLoginUser 2>/dev/null )" = "$TEMP_ADMIN" ]; then
    runIt "'$C_ENROLMENT' process >> /dev/null 2>&1"
