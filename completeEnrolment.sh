@@ -115,7 +115,7 @@ defaultReadBool() {
 }
 
 listRead() {
- plutil -extract "$1" raw -o - "$DEFAULTS_FILE" 2>/dev/null
+ plutil -extract "$1" raw -o - "$LIST_FILE" 2>/dev/null
 }
 
 settingsPlist() {
@@ -134,14 +134,14 @@ runIt() {
 }
 
 mailSend() {
- if [ "$EMAIL_AUTH" != "" ] && [ "$EMAIL_PASS" != "" ] && [[ "$EMAIL_SMTP" = *":"* ]]; then
+ if [ "$EMAIL_AUTH" != "" ] && [ "$( settingsPlist read email )" != "" ] && [[ "$EMAIL_SMTP" = *":"* ]]; then
   logIt "Attempting to send email with details:\nTo be sent via: $EMAIL_SMTP\nFrom: $1\nTo: ${AUTH_SMTP[@]}\nHidden by: $2\nSubject: $3\n\n$4\n"
   curl -s -S --verbose --ssl-reqd --url "smtp://$EMAIL_SMTP" \
      --mail-from "$1" \
      ${AUTH_SMTP[@]} \
      --mail-auth "$EMAIL_AUTH" \
      --user "$EMAIL_AUTH:$( readSaved email )" \
-     -T <( echo -e "From: $1\nTo: $2\nSubject: $3\n\n$4" | sed 's/$/\r/' ) 2>&1 | tee -a "$LOG_FILE"
+     -T <( echo -e "From: $1\nTo: $2\nSubject: $3\nContent-Type: text/html; charset=\"utf-8\"\nContent-Transfer-Encoding: quoted-printable\n\n<html><body><pre>$4</pre></body></html>" | sed 's/$/\r/' ) 2>&1 | tee -a "$LOG_FILE"
  else
   EMAIL_SMTP_HOST="$( host -t mx "$( echo $2 | cut -d '@' -f 2 )" | head -1 | cut -d ' ' -f 7 ):25"
   if [ "$5" = "" ]; then
@@ -153,7 +153,7 @@ mailSend() {
   curl -s -S --verbose --url "smtp://$EMAIL_SMTP_HOST" \
     	--mail-from "$1" \
      --mail-rcpt "$2" \
-     -T <( echo -e "From: $1\nTo: $BCCMAIL\nSubject: $3\n\n$4" | sed 's/$/\r/' ) 2>&1 | tee -a "$LOG_FILE"
+     -T <( echo -e "From: $1\nTo: $BCCMAIL\nSubject: $3\nContent-Type: text/html; charset=\"utf-8\"\nContent-Transfer-Encoding: quoted-printable\n\n<html><body><pre>$4</pre></body></html>" | sed 's/$/\r/' ) 2>&1 | tee -a "$LOG_FILE"
  fi
 }
 
@@ -231,11 +231,15 @@ track() {
 #  status confirmation type, file to check for (for status confirmation type: file), Team ID
 trackIt() {
  track update status wait
+ local THE_COUNT=""
+ if [ COUNT != "" ]; then
+  THE_COUNT=" #$COUNT"
+ fi
  case $3 in
   stamp)
    if [ "$RECON_DATE" = "" ]; then
     RECON_DATE=$( date "+%s" )
-   elif [ $RECON_DATE -lt $(($RECON_DATE+$PER_APP*60)) ]; then
+   elif [ $( date "+%s" ) -lt $(($RECON_DATE+$PER_APP*60)) ]; then
     track update status pending
     return 0
    fi
@@ -247,14 +251,13 @@ trackIt() {
    track update statustext "Paused."
   ;;
   *)
-   if [ COUNT = "" ]; then
-    track update statustext "Running..."
-   else
-    track update statustext "Attempt #$COUNT Running..."
-   fi
+   track update statustext "Install$THE_COUNT Running..."
   ;;
  esac
  case $1 in
+  command|secure)
+   track update statustext "Attempt$(if [ "$THE_COUNT" = "" ]; then echo "ing" ; else echo "$THE_COUNT at" ) the command..."
+  ;|
   secure)
    runIt "$2" "$( echo "$2" | awk -F '((|-|--secure-token-admin)(-p|-adminP)assword)' '{ print $1 }' ) ...(hidden)"
   ;;
@@ -262,13 +265,21 @@ trackIt() {
    runIt "$2"
   ;;
   policy)
+   track update statustext "Attempt$(if [ "$THE_COUNT" = "" ]; then echo "ing" ; else echo "$THE_COUNT at" ) the policy..."
    runIt "$C_JAMF policy -event $2"
   ;;
   install)
+   track update statustext "Attempt$(if [ "$THE_COUNT" = "" ]; then echo "ing" ; else echo "$THE_COUNT at" ) the install..."
    runIt "$C_INSTALL $2 NOTIFY=silent $GITHUBAPI"
   ;;
-  selfService)
-   runIt "launchctl asuser $( id -u $WHO_LOGGED ) open -j -a '$SELF_SERVICE' -u '$2'"
+  selfservice)
+   if [ "$( jq 'listitem[.currentitem].lastattempt' )" = "" ] || [ $( date "+%s" ) -ge $(($( jq 'listitem[.currentitem].lastattempt' )+$PER_APP*60)) ]; then
+    track update statustext "Asking Self Service to execute..."
+    runIt "launchctl asuser $( id -u $WHO_LOGGED ) open -j -g -a '$SELF_SERVICE' -u '$2'"
+    track update lastattempt "$( date "+%s" )"
+   else
+    track update statustext "Waiting for Self Service to execute..."
+   fi
   ;&
   *)
    sleep 30
@@ -277,7 +288,7 @@ trackIt() {
  THE_RESULT=$?
  case $3 in
   stamp)
-   if [ $RECON_DATE -ge $(($RECON_DATE+$PER_APP*60)) ]; then
+   if [ $( date "+%s" ) -ge $(($RECON_DATE+$PER_APP*60)) ]; then
     RECON_DATE=$( date "+%s" )
    fi
   ;&
@@ -292,7 +303,7 @@ trackIt() {
    return 0
   ;;
   *)
-   track update statustext "Confirming..."
+   track update statustext "Running Test(s)$THE_COUNT..."
    THE_TEST=false
   ;|
   appstore|teamid)
@@ -331,12 +342,8 @@ trackIt() {
     fi
     return 0
    else
-    track update status fail
-    if [ $COUNT = "" ]; then
-     track update statustext "Failed..."
-    else
-     track update statustext "Attempt #$COUNT Failed..."
-    fi
+    track update status error
+    track update statustext "Test$THE_COUNT Failed..."
     return 1
    fi
   ;;
@@ -350,8 +357,8 @@ repeatIt() {
   ((COUNT++))
  done
  if [ $COUNT -gt $PER_APP ]; then
-  track update status error
-  track update statustext "Failed after $PER_APP attempts"
+  track update status fail
+  track update statustext "Failed after $PER_APP tests"
   unset COUNT
   return 1
  else
@@ -382,7 +389,7 @@ trackNow() {
   ;|
   ^(policy|install))
    track update subtitle "$3"
-  ;;
+  ;|
   *)
    repeatIt "$2" "$3" "$4" "$5"
   ;;
@@ -458,7 +465,6 @@ case $1 in
    settingsPlist write apiId -string "$7"
    settingsPlist write apiSecret -string "$8"
   fi
-  EMAIL_PASS="${9:-""}"
   settingsPlist write email -string "$9"
 
 
@@ -764,10 +770,11 @@ case $1 in
     "$C_DIALOG" --ontop --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account password from Jamf Pro API"
     errorIt 2 "this should not have happened, unable to get Jamf Managed Account Password:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
    fi
-
+   
    trackNow "Creating $JAMF_ADMIN Account" \
    secure "'$C_MKUSER' --username $JAMF_ADMIN --password '$JAMF_PASS' --real-name '$JAMF_ADMIN Account' --home /private/var/$JAMF_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes --secure-token-admin-account-name '$TEMP_ADMIN' --secure-token-admin-password '$( readSaved temp )'" "Creating username $JAMF_ADMIN" \
     file "/private/var/$JAMF_ADMIN"
+   
    # Add or update LAPS ADMIN
    if [ -e "/Users/$LAPS_ADMIN" ]; then
     trackNow "Securing $LAPS_NAME Account" \
@@ -799,6 +806,9 @@ case $1 in
    fi
 
    infoBox
+   
+   LIST_FILE="$DEFAULTS_FILE"
+   
    until [ $( jq 'installCount' ) -ge $( listRead 'installs' ) ]; do
     # Cheating by using TRACKER_START to update the Task List loading entry
     plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loading task #$(($( jq 'installCount' )+1))" "$LOG_JSON"
@@ -813,6 +823,9 @@ case $1 in
     track update suppliedsubtitle "$( listRead "installs.$( jq 'installCount' ).subtitle" )"
     track update subtitletype "$( listRead "installs.$( jq 'installCount' ).subtitletype" )"
     case "$( jq 'listitem[.currentitem].commandtype' )" in
+     selfservice)
+      COMMAND="Self Service - $COMMAND"
+     ;;
      policy)
       COMMAND="Jamf Event - $COMMAND"
      ;;
@@ -821,7 +834,7 @@ case $1 in
      ;;
     esac
     case "$( jq 'listitem[.currentitem].subtitletype' )" in
-     secure)
+     replace|secure)
       track update subtitle "$( jq 'listitem[.currentitem].suppliedsubtitle' )"
      ;;
      command)
@@ -834,7 +847,6 @@ case $1 in
     track update successtype "$( listRead "installs.$( jq 'installCount' ).successtype" )"
     track update successtest "$( listRead "installs.$( jq 'installCount' ).successtest" )"
     track update successteam "$( listRead "installs.$( jq 'installCount' ).successteam" )"
-    track update subtitle "$( listRead "installs.$( jq 'installCount' ).subtitle" )"
     THE_ICON="$( listRead "installs.$( jq 'installCount' ).icon" )"
     if [ "$THE_ICON" = "" ]; then
      track update icon none
@@ -862,7 +874,6 @@ case $1 in
     track integer installCount $(($( jq 'installCount' )+1))
    done
 
-   # [ $( jq 'currentitem' ) -ge $( plutil -extract "listitem" raw -o - "$TRACKER_JSON" ) ]  $( listRead "installs" )
    if [ $(($( jq 'startitem' )+$( listRead 'installs' ))) -eq $( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" ) ]; then
     track new "Pause for 30 seconds"
     track update command "sleep 30"
@@ -898,7 +909,9 @@ case $1 in
     SUCCESS_COUNT=0
     until [ $( jq 'currentitem' ) -ge $( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" ) ]; do
      logIt "Running Task $( jq 'currentitem' )"
-     if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
+     if [ "$SUCCESS_COUNT" -eq $( jq 'installCount' ) ]; then
+      track update status success
+     elif [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
       trackIt "$( jq 'listitem[.currentitem].commandtype' )" \
        "$( jq 'listitem[.currentitem].command' )" \
        "$( jq 'listitem[.currentitem].successtype' )" \
@@ -909,12 +922,15 @@ case $1 in
         ((SUCCESS_COUNT++))
         infoBox
        ;;
-       fail)
+       error)
         if [ $COUNT -eq $PER_APP ]; then
          track update commandtype "$( jq 'listitem[.currentitem].backuptype' )"
          track update command "$( jq 'listitem[.currentitem].backupcommand' )"
          COMMAND="$( jq 'listitem[.currentitem].backupcommand' )"
          case "$( jq 'listitem[.currentitem].backuptype' )" in
+          selfservice)
+           COMMAND="Self Service - $COMMAND"
+          ;;
           policy)
            COMMAND="Jamf Event - $COMMAND"
           ;;
@@ -923,7 +939,7 @@ case $1 in
           ;;
          esac
          case "$( jq 'listitem[.currentitem].subtitletype' )" in
-          command)
+          replace|command)
            track update subtitle "$COMMAND"
           ;;
           combine)
@@ -933,11 +949,12 @@ case $1 in
         fi
        ;;
       esac
+      sleep 2
      else
       ((SUCCESS_COUNT++))
       infoBox
+      sleep 5
      fi
-     sleep 5
      track integer currentitem $(($( jq 'currentitem' )+1))
     done
     ((COUNT++))
@@ -960,16 +977,17 @@ case $1 in
     success)
      ((FULLSUCCESS_COUNT++))
     ;;
-    fail)
+    error)
      ((FAILED_COUNT++))
-     track update status error
+     track update status fail
     ;;
    esac
    track integer currentitem $(($( jq 'currentitem' )+1))
   done
   track integer currentitem $(($( jq 'currentitem' )-1))
   track update status success
-  FINISHED="$( date )"
+  track update statustext "Checked"
+  FINISHED="$( date "+%s" )"
   ((FULLSUCCESS_COUNT++))
   logIt "Success: $FULLSUCCESS_COUNT, Installs: $SUCCESS_COUNT, Failed: $FAILED_COUNT"
   infoBox
@@ -978,7 +996,7 @@ case $1 in
   track new "Emailing Installation Status"
   track update status wait
   track update statustext "Building email content..."
-  EMAIL_SUBJECT="$( scutil --get ComputerName ) has "
+  EMAIL_SUBJECT="$( scutil --get ComputerName ) "
   if [ $FAILED_COUNT -gt 0 ]; then
    EMAIL_SUBJECT+="completed (with some failures)"
   else
@@ -986,7 +1004,7 @@ case $1 in
   fi
   EMAIL_SUBJECT+=" $DEFAULTS_NAME from $JAMF_SERVER"
   # swift dialog has issues with :'s and ,'s in the command file
-  track update subtitle "OSDNotification:- $EMAIL_SUBJECT"
+  track update subtitle "$EMAIL_SUBJECT"
   EMAIL_SUBJECT="OSDNotification: $EMAIL_SUBJECT"
   EMAIL_BODY="$( system_profiler SPHardwareDataType )\n"
   NETWORK_INTERFACE="$( route get "$JAMF_SERVER" | grep interface | awk '{ print $NF }' )"
@@ -1074,7 +1092,7 @@ case $1 in
   
   if [ "$MAIL_RESULT" -gt 0 ] || [ "$TO_RESULT" -gt 0 ] || [ "$ERR_RESULT" -gt 0 ] || [ "$BCC_RESULT" -gt 0 ]; then
    track update statustext "An email failed to send, see log"
-   track update status error
+   track update status fail
   else
    track update statustext "Email(s) sent"
    track update status success

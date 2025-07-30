@@ -30,13 +30,15 @@
       "enum": [
        "secure",
        "combine",
-       "command"
+       "command",
+       "replace"
       ],
       "options": {
        "enum_titles": [
         "Use only the supplied subtitle",
         "Combine the subtitle with the command",
-        "Display the command"
+        "Display the command",
+        "Use supplied subtitle and replace with command when switching to backup"
        ]
       },
       "title": "Subtitle Type",
