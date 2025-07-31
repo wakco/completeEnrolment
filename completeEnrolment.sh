@@ -1062,8 +1062,8 @@ case $1 in
    INFOBOX+="Failed: $FAILED_COUNT\n"
    INFOBOX+="Completed Tasks: $FULLSUCCESS_COUNT\n"
    EMAIL_BODY+="\nThe lnitial log is available at "
-   EMAIL_BODY+="<a href= \"${JAMF_URL}computers.html?id=$( defaultRead jssID )&o=r&v=history\">${JAMF_URL}computers.html?id=$( defaultRead jssID )&o=r&v=history</a>"
-   EMAIL_BODY+=", with full logs available in the /Library/Logs folder on the computer.\n"
+   EMAIL_BODY+="<a href= \"${JAMF_URL}computers.html?id=$( defaultRead jssID )&o=r&v=history\">${JAMF_URL}computers.html?id=$( defaultRead jssID )&o=r&v=history</a>,\n"
+   EMAIL_BODY+="with full logs available in the /Library/Logs folder on the computer.\n"
    EMAIL_BODY+="Please review the logs and contact ${"$( defaultRead serviceName )":-"Service Management"} if any assistance is required.\n\n\n"
 
    track integer currentitem 0
