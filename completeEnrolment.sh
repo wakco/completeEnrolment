@@ -841,25 +841,28 @@ case $1 in
 
   runIt "plutil -convert json -o '$INSTALLS_JSON' '$DEFAULTS_FILE'"
   THE_TITLE="$( /usr/bin/jq -Mr '.name // empty' "$INSTALLS_JSON" )"
+  if [ "$THE_TITLE" = "" ]; then
+   THE_TITLE="Main"
+  fi
+  trackNew "$THE_TITLE"
+  track update icon 'SF=doc.text'
+  track update status wait
+  track update subtitle "$( /usr/bin/jq -Mr '.subtitle // empty' "$INSTALLS_JSON" )"
   if [ "$( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )" = "" ]; then
    runIt "plutil -insert listitem -array '$INSTALLS_JSON'"
-  elif [ "$THE_TITLE" != "" ]; then
-   trackNew "$THE_TITLE"
-   track update icon 'SF=doc.text'
-   track update status wait
-   track update subtitle "$( /usr/bin/jq -Mr '.subtitle // empty' "$INSTALLS_JSON" )"
   fi
   if [ "$( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )" -gt 0 ]; then
-   if [ "$THE_TITLE" != "" ]; then
-    track update statustext "Loaded."
-    track update status success
-   fi
+   track update statustext "Loaded."
+   track update status success
    LIST_FILES="$( eval "ls '$DEFAULTS_BASE-'*" 2>/dev/null )"
    logIt "Additional Config Files to load: $LIST_FILES"
    for LIST_FILE in ${(@f)LIST_FILES} ; do
     logIt "Reading Config File: $LIST_FILE"
     if [ "$( plutil -extract 'installs' raw -o - "$LIST_FILE" 2>/dev/null )" -gt 0 ]; then
      THE_TITLE="$( plutil -extract 'title' raw -o - "$LIST_FILE" )"
+     if [ "$THE_TITLE" = "" ]; then
+      THE_TITLE="$( echo "$LIST_FILE" | sed -E 's/.*-(.*)\.plist$/\1/' )"
+     fi
      plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loading task list $THE_TITLE" "$TRACKER_JSON"
      echo "listitem: index: $( jq 'trackitem' ), statustext: Loading task list $THE_TITLE" >> "$TRACKER_COMMAND"
      sleep 0.1
