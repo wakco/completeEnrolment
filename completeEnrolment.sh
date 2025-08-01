@@ -854,7 +854,7 @@ case $1 in
     track update statustext "Loaded."
     track update status success
    fi
-   LIST_FILES="$( eval "ls '$DEFAULTS_BASE.'*" 2>/dev/null )"
+   LIST_FILES="$( eval "ls '$DEFAULTS_BASE-'*" 2>/dev/null )"
    logIt "Additional Config Files to load: $LIST_FILES"
    for LIST_FILE in ${(@f)LIST_FILES} ; do
     logIt "Reading Config File: $LIST_FILE"
