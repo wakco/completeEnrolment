@@ -1,5 +1,8 @@
 #!/bin/zsh -f
 
+# Version
+VERSION="1.0a"
+
 # Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
 
@@ -101,7 +104,7 @@ errorIt() {
 logIt() {
  echo "$(date) - $@" 2>&1 | tee -a "$LOG_FILE"
 }
-logIt "###################### completeEnrolment started with $1."
+logIt "###################### completeEnrolment $VERSION started with $1."
 
 defaultRead() {
  defaults read "$DEFAULTS_FILE" "$1" 2>/dev/null
@@ -116,7 +119,7 @@ defaultReadBool() {
 }
 
 listRead() {
- plutil -extract "$1" raw -o - "$LIST_FILE" 2>/dev/null
+ plutil -extract "$1" raw -o - "$INSTALLS_JSON" 2>/dev/null
 }
 
 settingsPlist() {
@@ -252,7 +255,7 @@ trackIt() {
    track update statustext "Paused."
   ;;
   *)
-   track update statustext "Install$THE_COUNT Running..."
+   track update statustext "$THE_COUNT Running..."
   ;;
  esac
  case $1 in
@@ -281,7 +284,7 @@ trackIt() {
    else
     track update statustext "Waiting for Self Service to execute..."
    fi
-  ;&
+  ;|
   *)
    sleep 30
   ;;
@@ -479,7 +482,7 @@ case $1 in
   settingsPlist write laps -string "$LAPS_PASS"
   if [ "$7" = "" ] || [ "$8" = "" ]; then
    if [ "$WHO_LOGGED" != "_mbsetupuser" ]; then
-    "$C_DIALOG" --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: missing Jamf Pro API login details"
+    "$C_DIALOG" --ontop --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: missing Jamf Pro API login details"
    fi
    errorIt 2 "API details are required for access to the \$JAMF_ADMIN password, the following was supplied:\nAPI ID: $7\nAPI Secret: $8"
   else
@@ -590,7 +593,7 @@ case $1 in
     defaults write "$LOGIN_PLIST" Label "$DEFAULTS_NAME.loginwindow"
     defaults write "$LOGIN_PLIST" RunAtLoad -bool TRUE
     defaults write "$LOGIN_PLIST" ProgramArguments -array \
-     "/Library/Application Support/Dialog/Dialog.app/Contents/MacOS/Dialog" \
+     "/Library/Application Support/Dialog/Dialog.app/Contents/MacOS/Dialog" "--ontop" \
      "--loginwindow" "--button1disabled" "--button1text" "none" "--jsonfile" "$TRACKER_JSON"
     chmod ugo+r "$LOGIN_PLIST"
     sleep 2
@@ -605,7 +608,7 @@ case $1 in
     # so we'll ask for it, and in this instance, no need to restart, once the login details are
     # collected, start the dialog and just start processing (after setting the computer name).
     # add completesetup with volume owner details, without automatic login.
-    "$C_DIALOG"
+    "$C_DIALOG" --ontop
     
     # code here to be completed
     runIt "'$C_ENROLMENT' startDialog >> /dev/null 2>&1 &"
@@ -655,6 +658,12 @@ case $1 in
      secure "'$C_MKUSER' --username '$TEMP_ADMIN' --password '$( settingsPlist read temp | base64 -d )' --real-name '$TEMP_NAME' --home /Users/$TEMP_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --automatic-login --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes $MKUSER_OPTIONS" "Creating username $TEMP_ADMIN with mkuser" \
      file "/Users/$TEMP_ADMIN" 'SF=person.badge.plus'
     
+    # Block Self Service macOS Onboarding for TEMP_ADMIN account, we want to use Self Service to
+    #  help with installing, and as such can't have Self Service macOS Onboarding getting in the way
+    runIt "sudo -u '$TEMP_ADMIN' mkdir -p '/Users/$TEMP_ADMIN/Library/Preferences'"
+    runIt "sudo -u '$TEMP_ADMIN' defaults write '/Users/$TEMP_ADMIN/Library/Preferences/com.jamfsoftware.selfservice.mac.plist' 'com.jamfsoftware.selfservice.onboardingcomplete' -bool TRUE"
+    runIt "sudo -u '$TEMP_ADMIN' defaults write '/Users/$TEMP_ADMIN/Library/Preferences/com.jamfsoftware.selfserviceplus.plist' 'com.jamfsoftware.selfservice.onboardingcomplete' -bool TRUE"
+    runIt "chown '$TEMP_ADMIN' /Users/$TEMP_ADMIN/Library/Preferences/com.jamfsoftware.selfservice*"
    ;|
    _mbsetupuser)
     # Restart, and record it as a task
@@ -673,8 +682,8 @@ case $1 in
    ;;
   esac
   if ${$( defaultReadBool emailJamfLog ):-false} ; then
-   # cannot use errorIt to exit here, since 1. this is not an error, and 2. because errorIt will
-   # also cleanUp
+   # cannot use errorIt to exit here, since 1. this was request, as such, not actually an error, and
+   #  2. because errorIt will also cleanUp, which is definitely not wanted at this stage.
    logIt "Exiting with an error signal as requested in the configuration."
    exit 1
   else
@@ -771,7 +780,7 @@ case $1 in
     --data-urlencode 'grant_type=client_credentials' \
     --data-urlencode "client_secret=$( readSaved apiSecret )" )" | /usr/bin/jq -Mr ".access_token" )"
    if [[ "$JAMF_AUTH_TOKEN" = *httpStatus* ]]; then
-    "$C_DIALOG" --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to login to Jamf Pro API"
+    "$C_DIALOG" --ontop --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to login to Jamf Pro API"
     errorIt 2 "This should not have happened, are the API ID/Secret details correct?\nResponse from $JAMF_URL:\n$JAMF_AUTH_TOKEN"
    fi
    sleep 1
@@ -816,19 +825,73 @@ case $1 in
     file "/private/var/$LAPS_ADMIN" 'SF=person.badge.plus'
   fi
   
-  if [ "$( defaults read "$DEFAULTS_FILE" installs 2>/dev/null )" != "" ]; then
-   LIST_FILE="$DEFAULTS_FILE"
+  # Allow for multiple install lists, to help provide better scoping of base and specific app
+  #  installs, with reduced replication, such that the base apps will not be required in all install
+  #  list variations.
+
+  trackNew "Task List"
+  track update icon 'SF=checklist'
+  track update status pending
+  track update statustext "Loading..."
+  track update subtitle "Loading the task list(s) from config profile(s)."
+  track integer trackitem ${$( jq 'currentitem' ):--1}
+
+  runIt "plutil -convert json -o '$INSTALLS_JSON' '$DEFAULTS_FILE'"
+  THE_TITLE="$( /usr/bin/jq -Mr '.name // empty' "$INSTALLS_JSON" )"
+  if [ "$( plutil -extract installs raw -o - "$INSTALLS_JSON" 2>/dev/null )" = "" ]; then
+   runIt "plutil -insert listitem -array '$INSTALLS_JSON'"
+  elif [ "$THE_TITLE" != "" ]; then
+   trackNew "$THE_TITLE"
+   track update status wait
+   track update subtitle "$( /usr/bin/jq -Mr '.subtitle // empty' "$INSTALLS_JSON" )"
+  fi
+  if [ "$( plutil -extract installs raw -o - "$INSTALLS_JSON" 2>/dev/null )" -gt 0 ]; then
+   if [ "$BASE_TITLE" != "" ]; then
+    track update statustext "Loaded."
+    track update status success
+   fi
+   LIST_FILES="$( eval "ls '$DEFAULTS_BASE.'*" 2>/dev/null )"
+   logIt "Additional Config Files to load: $LIST_FILES"
+   for LIST_FILE in ${(@f)LIST_FILES} ; do
+    if [ "$( plutil -extract installs raw -o - "$LIST_FILE" 2>/dev/null )" = "" ] && [ "$( plutil -extract installs raw -o - "$LIST_FILE" 2>/dev/null )" -gt 0 ]; then
+     THE_TITLE="$( plutil -extract 'title' raw -o - "$LIST_FILE" )"
+     plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loading task list $THE_TITLE" "$TRACKER_JSON"
+     echo "listitem: index: $( jq 'trackitem' ), statustext: Loading task list $THE_TITLE" >> "$TRACKER_COMMAND"
+     sleep 0.1
+     trackNew "$THE_TITLE"
+     if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
+      track update subtitle "$( plutil -extract 'subtitle' raw -o - "$INSTALLS_JSON" )"
+      track update status wait
+      track update status text "Loading..."
+      for (( i = 0; i < $( plutil -extract 'installs' raw -o - "$LIST_FILE" ); i++ )); do
+       runIt "plutil -insert 'installs' -json '\$( plutil -extract 'installs.$i' json -o - '$LIST_FILE' )' -append '$INSTALLS_JSON'"
+      done
+      track update statustext "Loaded."
+      track update status success
+     fi
+    fi
+   done
+   plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Config Profile(s) loaded. Loading Tasks..." "$TRACKER_JSON"
+   echo "listitem: index: $( jq 'trackitem' ), statustext: Config Profile(s) loaded. Loading Tasks..." >> "$TRACKER_COMMAND"
+   sleep 1
+
+
+  
+#  if [ "$( defaults read "$DEFAULTS_FILE" installs 2>/dev/null )" != "" ]; then
+#   INSTALLS_JSON="$DEFAULTS_FILE"
    
-   trackNew "Task List"
-   track update icon 'SF=checklist'
-   track update status pending
-   track update statustext "Loading..."
-   track update subtitle "Loading the task list from the config profile."
+#   trackNew "Task List"
+#   track update icon 'SF=checklist'
+#   track update status pending
+#   track update statustext "Loading..."
+#  track update subtitle "Loading the task list from the config profile."
    # Identify index of first cycling check item, until now each item would retry automatically
    #  immediately for up to 5 time, now we want to switch to trying everything else before retrying,
    #  and keep going until everything is successful, or a specified timeout (at 5 minutes per item?).
-   track integer trackitem ${$( jq 'currentitem' ):--1}
-   track integer startitem $(($( jq 'trackitem' )+1))
+#   track integer trackitem ${$( jq 'currentitem' ):--1}
+   
+   
+   track integer startitem $( jq 'currentitem' )
     
    # load software installs
    track integer 'installCount' 0
@@ -839,11 +902,12 @@ case $1 in
    until [ $( jq 'installCount' ) -ge $( listRead 'installs' ) ]; do
     
     # Cheating by using TRACKER_START to update the Task List loading entry
-    plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loading task #$(($( jq 'installCount' )+1))" "$LOG_JSON"
-    echo "listitem: index: $( jq 'trackitem' ), statustext: Loading task #$(($( jq 'installCount' )+1))"
+    plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loading task #$(($( jq 'installCount' )+1))" "$TRACKER_JSON"
+    echo "listitem: index: $( jq 'trackitem' ), statustext: Loading task #$(($( jq 'installCount' )+1))" >> "$TRACKER_COMMAND"
     sleep 0.1
     
     # for each item in config profile
+    
     trackNew "$( listRead "installs.$( jq 'installCount' ).title" )"
     if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
      COMMAND="$( listRead "installs.$( jq 'installCount' ).command" )"
@@ -887,7 +951,7 @@ case $1 in
         #  the downloaded copy makes much more sense.
         ICON_NAME="$CACHE/$( basename "$THE_ICON" )"
         runIt "curl -s -o '$ICON_NAME' '$THE_ICON'"
-        THE_ICON="$CACHE/icon-$( jq 'installCount' )-$( js 'currentitem' ).png"
+        THE_ICON="$CACHE/icon-$( jq 'installCount' )-$( jq 'currentitem' ).png"
         runIt "sips -s format png '$ICON_NAME' --out '$THE_ICON'"
        ;&
        *)
@@ -904,17 +968,22 @@ case $1 in
     track integer installCount $(($( jq 'installCount' )+1))
    done
 
-   if [ $(($( jq 'startitem' )+$( listRead 'installs' ))) -eq $( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" ) ]; then
+   plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Inserting Pause & Inventory Update..." "$TRACKER_JSON"
+   echo "listitem: index: $( jq 'trackitem' ), statustext: Inserting Pause & Inventory Update..." >> "$TRACKER_COMMAND"
+   sleep 1
+
+#   if [ $(($( jq 'startitem' )+$( listRead 'installs' ))) -eq $( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" ) ]; then
     trackNew "Pause for 30 seconds"
     if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
      track update icon 'SF=pause.circle'
      track update command "sleep 30"
-     track update commandtype command
-     track update subtitle "Pause for 30 seconds before checking again."
+     track update commandtype none
+     track update subtitle "30 second pause for Managed & Self Service tasks."
      track update successtype "pause"
     fi
-   fi
-   if [ $(($( jq 'startitem' )+$( listRead 'installs' )+1)) -eq $( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" ) ]; then
+#   fi
+   sleep 1
+#   if [ $(($( jq 'startitem' )+$( listRead 'installs' )+1)) -eq $( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" ) ]; then
     trackNew "Inventory Update"
     if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
      track update icon 'SF=list.bullet.rectangle'
@@ -923,9 +992,9 @@ case $1 in
      track update subtitle "Updates inventory once every $PER_APP minutes"
      track update successtype "stamp"
     fi
-   fi
+#   fi
    
-   sleep 2
+   sleep 1
    
    plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loaded" "$TRACKER_JSON"
    echo "listitem: index: $( jq 'trackitem' ), statustext: Loaded" >> "$TRACKER_COMMAND"
@@ -1061,7 +1130,7 @@ case $1 in
    INFOBOX+="Installed: $SUCCESS_COUNT\n"
    INFOBOX+="Failed: $FAILED_COUNT\n"
    INFOBOX+="Completed Tasks: $FULLSUCCESS_COUNT\n"
-   EMAIL_BODY+="\nThe lnitial log is available at "
+   EMAIL_BODY+="\nThe initial log is available at "
    EMAIL_BODY+="<a href= \"${JAMF_URL}computers.html?id=$( defaultRead jssID )&o=r&v=history\">${JAMF_URL}computers.html?id=$( defaultRead jssID )&o=r&v=history</a>,\n"
    EMAIL_BODY+="with full logs available in the /Library/Logs folder on the computer.\n"
    EMAIL_BODY+="Please review the logs and contact ${"$( defaultRead serviceName )":-"Service Management"} if any assistance is required.\n\n\n"

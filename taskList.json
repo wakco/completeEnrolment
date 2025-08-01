@@ -5,8 +5,16 @@
   "remove_empty_properties": true
  },
  "properties": {
+  "name": {
+   "title": "Task List Name",
+   "type": "string"
+  },
+  "subtitle": {
+   "title": "Description for this list",
+   "type": "string"
+  },
   "installs": {
-   "title": "Installs",
+   "title": "Installs/Tasks",
    "description": "",
    "type": "array",
    "items": {
