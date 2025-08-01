@@ -7,6 +7,10 @@
    <FileRef
       location = "group:completeEnrolment.sh">
    </FileRef>
+   <FileSystemSynchronizedGroup
+      location = "group:Preset Tasks Lists"
+      name = "Preset Tasks Lists">
+   </FileSystemSynchronizedGroup>
    <FileRef
       location = "group:completeEnrolment.json">
    </FileRef>

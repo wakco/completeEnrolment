@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.0a"
+VERSION="1.0c"
 
 # Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -38,6 +38,7 @@ if [ "$SELF_SERVICE" = "" ]; then
  SELF_SERVICE="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist self_service_app_path 2>/dev/null )"
 fi
 CPU_ARCH="$( arch )"
+TEST_ONLY=false
 
 # Whose logged in
 
@@ -258,38 +259,40 @@ trackIt() {
    track update statustext "$THE_COUNT Running..."
   ;;
  esac
- case $1 in
-  command|secure)
-   track update statustext "Attempt$( if [ "$THE_COUNT" = "" ]; then echo "ing" ; else echo "$THE_COUNT at" ; fi ) the command..."
-  ;|
-  secure)
-   runIt "$2" "$( echo "$2" | awk -F '((|-|--secure-token-admin)(-p|-adminP)assword)' '{ print $1 }' ) ...(hidden)"
-  ;;
-  command)
-   runIt "$2"
-  ;;
-  policy)
-   track update statustext "Attempt$( if [ "$THE_COUNT" = "" ]; then echo "ing" ; else echo "$THE_COUNT at" ; fi ) the policy..."
-   runIt "$C_JAMF policy -event $2"
-  ;;
-  install)
-   track update statustext "Attempt$( if [ "$THE_COUNT" = "" ]; then echo "ing" ; else echo "$THE_COUNT at" ; fi ) the install..."
-   runIt "$C_INSTALL $2 NOTIFY=silent $GITHUBAPI"
-  ;;
-  selfservice)
-   if [ "$( jq 'listitem[.currentitem].lastattempt' )" = "" ] || [ $( date "+%s" ) -ge $(($( jq 'listitem[.currentitem].lastattempt' )+$PER_APP*60)) ]; then
-    track update statustext "Asking Self Service to execute..."
-    runIt "launchctl asuser $( id -u $WHO_LOGGED ) open -j -g -a '$SELF_SERVICE' -u '$2'"
-    track update lastattempt "$( date "+%s" )"
-   else
-    track update statustext "Waiting for Self Service to execute..."
-   fi
-  ;|
-  *)
-   sleep 30
-  ;;
- esac
- THE_RESULT=$?
+ if ! $TEST_ONLY || [[ "$3" = (result|stamp|date|pause) ]]; then
+  case $1 in
+   command|secure)
+    track update statustext "Attempt$( if [ "$THE_COUNT" = "" ]; then echo "ing" ; else echo "$THE_COUNT at" ; fi ) the command..."
+   ;|
+   secure)
+    runIt "$2" "$( echo "$2" | awk -F '(p|P)assword' '{ print $1 }' )... (hidden)"
+   ;;
+   command)
+    runIt "$2"
+   ;;
+   policy)
+    track update statustext "Attempt$( if [ "$THE_COUNT" = "" ]; then echo "ing" ; else echo "$THE_COUNT at" ; fi ) the policy..."
+    runIt "$C_JAMF policy -event $2"
+   ;;
+   install)
+    track update statustext "Attempt$( if [ "$THE_COUNT" = "" ]; then echo "ing" ; else echo "$THE_COUNT at" ; fi ) the install..."
+    runIt "$C_INSTALL $2 NOTIFY=silent $GITHUBAPI"
+   ;;
+   selfservice)
+    if [ "$( jq 'listitem[.currentitem].lastattempt' )" = "" ] || [ $( date "+%s" ) -ge $(($( jq 'listitem[.currentitem].lastattempt' )+$PER_APP*120)) ]; then
+     track update statustext "Asking Self Service to execute..."
+     runIt "launchctl asuser $( id -u $WHO_LOGGED ) open -j -g -a '$SELF_SERVICE' -u '$2'"
+     track update lastattempt "$( date "+%s" )"
+    else
+     track update statustext "Waiting for Self Service to execute..."
+    fi
+   ;|
+   *)
+    sleep 30
+   ;;
+  esac
+  THE_RESULT=$?
+ fi
  case $3 in
   stamp)
    if [ $( date "+%s" ) -ge $(($RECON_DATE+$PER_APP*60)) ]; then
@@ -838,22 +841,24 @@ case $1 in
 
   runIt "plutil -convert json -o '$INSTALLS_JSON' '$DEFAULTS_FILE'"
   THE_TITLE="$( /usr/bin/jq -Mr '.name // empty' "$INSTALLS_JSON" )"
-  if [ "$( plutil -extract installs raw -o - "$INSTALLS_JSON" 2>/dev/null )" = "" ]; then
+  if [ "$( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )" = "" ]; then
    runIt "plutil -insert listitem -array '$INSTALLS_JSON'"
   elif [ "$THE_TITLE" != "" ]; then
    trackNew "$THE_TITLE"
+   track update icon 'SF=doc.text'
    track update status wait
    track update subtitle "$( /usr/bin/jq -Mr '.subtitle // empty' "$INSTALLS_JSON" )"
   fi
-  if [ "$( plutil -extract installs raw -o - "$INSTALLS_JSON" 2>/dev/null )" -gt 0 ]; then
-   if [ "$BASE_TITLE" != "" ]; then
+  if [ "$( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )" -gt 0 ]; then
+   if [ "$THE_TITLE" != "" ]; then
     track update statustext "Loaded."
     track update status success
    fi
    LIST_FILES="$( eval "ls '$DEFAULTS_BASE.'*" 2>/dev/null )"
    logIt "Additional Config Files to load: $LIST_FILES"
    for LIST_FILE in ${(@f)LIST_FILES} ; do
-    if [ "$( plutil -extract installs raw -o - "$LIST_FILE" 2>/dev/null )" = "" ] && [ "$( plutil -extract installs raw -o - "$LIST_FILE" 2>/dev/null )" -gt 0 ]; then
+    logIt "Reading Config File: $LIST_FILE"
+    if [ "$( plutil -extract 'installs' raw -o - "$LIST_FILE" 2>/dev/null )" -gt 0 ]; then
      THE_TITLE="$( plutil -extract 'title' raw -o - "$LIST_FILE" )"
      plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loading task list $THE_TITLE" "$TRACKER_JSON"
      echo "listitem: index: $( jq 'trackitem' ), statustext: Loading task list $THE_TITLE" >> "$TRACKER_COMMAND"
@@ -863,7 +868,7 @@ case $1 in
       track update subtitle "$( plutil -extract 'subtitle' raw -o - "$INSTALLS_JSON" )"
       track update status wait
       track update status text "Loading..."
-      for (( i = 0; i < $( plutil -extract 'installs' raw -o - "$LIST_FILE" ); i++ )); do
+      for (( i = 0; i < $( plutil -extract 'installs' raw -o - "$LIST_FILE" 2>dev/null ); i++ )); do
        runIt "plutil -insert 'installs' -json '\$( plutil -extract 'installs.$i' json -o - '$LIST_FILE' )' -append '$INSTALLS_JSON'"
       done
       track update statustext "Loaded."
@@ -891,7 +896,7 @@ case $1 in
 #   track integer trackitem ${$( jq 'currentitem' ):--1}
    
    
-   track integer startitem $( jq 'currentitem' )
+   track integer startitem $(($( jq 'currentitem' )+1))
     
    # load software installs
    track integer 'installCount' 0
@@ -1008,7 +1013,10 @@ case $1 in
    FINISH_TIME=$(($START_TIME+$WAIT_TIME))
    infoBox
    COUNT=1
-   logIt "Total Tasks"
+   logIt "========================= Process Tasks ========================="
+   # On first run, whether restarted or not, test to see if an task has already completed
+   # Excludes the result test, as well as date, stamp, and pause
+   TEST_ONLY=true
    until [ "$SUCCESS_COUNT" -eq $( jq 'installCount' ) ] || [ $( date "+%s" ) -gt $FINISH_TIME ]; do
     track integer currentitem $( jq 'startitem' )
     SUCCESS_COUNT=0
@@ -1062,6 +1070,7 @@ case $1 in
      fi
      track integer currentitem $(($( jq 'currentitem' )+1))
     done
+    TEST_ONLY=false
     ((COUNT++))
    done
    track integer currentitem $(($( jq 'currentitem' )-1))
