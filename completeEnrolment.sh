@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.0k"
+VERSION="1.0l"
 
 # Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -440,22 +440,24 @@ trackNow() {
 }
 
 subtitleType() {
- THE_COMMAND=$2
- case "$( jq "listitem[.currentitem].$1" )" in
+ case $( jq 'listitem[.currentitem].commandtype' ) in
   selfservice)
-   THE_COMMAND="Self Service - $2"
+   echo "Self Service - $( jq 'listitem[.currentitem].command' )"
   ;;
   policy)
-   THE_COMMAND="Jamf Policy - $2"
+   echo "Jamf Policy - $( jq 'listitem[.currentitem].command' )"
   ;;
   install)
-   THE_COMMAND="Installomator Label - $2"
+   echo "Installomator Label - $( jq 'listitem[.currentitem].command' )"
   ;;
   jac)
-   THE_COMMAND="Jamf App Installer"
+   echo "Jamf App Installer"
   ;;
   mas)
-   THE_COMMAND="Mac App Store"
+   echo "Mac App Store"
+  ;;
+  *)
+   echo "$( jq 'listitem[.currentitem].command' )"
   ;;
  esac
 }
@@ -647,12 +649,77 @@ case $1 in
     # so we'll ask for it, and in this instance, no need to restart, once the login details are
     # collected, start the dialog and just start processing (after setting the computer name).
     # add completesetup with volume owner details, without automatic login.
-    "$C_DIALOG" --ontop
-    
-    # code here to be completed
+
     runIt "'$C_ENROLMENT' startDialog >> /dev/null 2>&1 &"
+
+    logIt "Manual or re-enrollment requires login details of a Secure Token enabled account."
+ 
+    # ask for password of someone with a secure token, and promote to admin
+    # fdesetup list | cut -d ',' -f 1 | tr '\n' ' '
+    # dseditgroup -o edit -a $SECURE_ADMIN -t user admin
+    # This is where it gets tricky, as some methods of enrollment are not supposed to interact with the user.
+    # A profiles renew -type enrollment is less likely to allow this than a manual enrollment, so some testing will be required.
+
+    TRY_AGAIN=""
+    DEMOTE_ADMIN=""
+    LOGIN_HEADER="**The login of a Volume Owner (a Secure Token enabled user) is required to complete this enrollment.**\n\n**Please login as a Volume Owner below.**  \n**Current Volume Owners are:**"
+    LOGIN_FOOTER="---\n\nNow is a good time to check the computer information is correct, and the following superuser (sudo) terminal commands "
+    LOGIN_FOOTER+="can be used to manage Volume Owners (to fix Secure Tokens), in the event the login details for all of the above usernames are unknown:\n\n    fdesetup list  \n"
+    LOGIN_FOOTER+="    sysadminctl -secureTokenOn <username> -password - -adminUser <admin> -adminPassword -  \n- _fdesetup_ lists all accounts with Secure Tokens.  \n"
+    LOGIN_FOOTER+="- _sysadminctl_ creates the Secure Token after asking for the passwords of the _admin_ and _username_ accounts.  \n    - The _admin_ account must have a Secure Token."
+    trackNew "Login Required"
+    track update status pending
+    track update subtitle "Manual (Re-)Enrolment requires login from a Volume Owner"
+    track update statustext "Waiting for successful login..."
+    while [ "$SECURE_ADMIN" = "" ]; do
+     LOGIN_MESSAGE="$LOGIN_HEADER $( fdesetup list | cut -d ',' -f 1 | tr '\n' ' ' )  \n$TRY_AGAIN\n\n$LOGIN_FOOTER"
+     if [ "$TRY_AGAIN" = "" ]; then
+      LOGIN_DETAILS="$( "$C_DIALOG" --ontop --title "Enrollment requires login to preceed..." --icon "$DIALOG_ICON" --message "$LOGIN_MESSAGE" --messagefont size=16 --textfield "Username",required,prompt="Please enter a Volume Owner" --textfield "Password",secure,required --json --big 2>>"$LOG_FILE" )"
+     else
+      LOGIN_DETAILS="$( "$C_DIALOG" --ontop --title "Enrollment requires login to preceed..." --icon warning --overlayicon "$DIALOG_ICON" --message "$LOGIN_MESSAGE" --messagefont size=16 --textfield "Username",required,prompt="Please enter a Volume Owner" --textfield "Password",secure,required --json --big 2>>"$LOG_FILE" )"
+     fi
+     track update status wait
+     A_ADMIN="$( readJSON "$LOGIN_DETAILS" "Username" )"
+     A_PASS="$( readJSON "$LOGIN_DETAILS" "Password" )"
+     logIt "User is attempting to log into: $A_ADMIN"
+     if dscl . -authonly "$A_ADMIN" "$A_PASS" > /dev/null 2>&1 && [ "$( fdesetup list | grep -c "$A_ADMIN" )" -gt 0 ]; then
+      logIt "Login successful, and $A_ADMIN has a Secure Token"
+      track update status success
+      track update statustext "Login Successful"
+      SECURE_ADMIN="$A_ADMIN"
+      SECURE_PASS="$A_PASS"
+      if [ "$( dscl . -read /Groups/admin GroupMembership | cut -d " " -f 2- | grep -c "$A_ADMIN" )" -lt 1 ]; then
+       # only give admin if we need to and track it for removal later
+       LogIt "Admin access is required. Giving $A_ADMIN temporary admin access."
+       track update statustext "Admin access required, elevating temporarily..."
+       dseditgroup -o edit -a "$A_ADMIN" -t user admin >> "$LOG_FILE" 2>&1
+       DEMOTE_ADMIN="$A_ADMIN"
+       # we need this account to be an admin.
+      fi
+     elif [ "$( fdesetup list | grep -c "$A_ADMIN" )" -gt 0 ]; then
+      logIt "Login to $A_ADMIN failed, asking the user to log in again..."
+      track update status error
+      track update statustest "Password for $A_ADMIN was incorrect"
+      TRY_AGAIN="<br>**Password for $A_ADMIN was incorrect.**"
+     else
+      logIt "Secure Token missing for $A_ADMIN, they are not a Volume Owner, asking the user to log in again..."
+      track update status error
+      track update statustest "$A_ADMIN is not a Volume Owner, please try one of the listed logins"
+      TRY_AGAIN="<br>**$A_ADMIN is not a Volume Owner.**"
+     fi
+    done
     
-    MKUSER_OPTIONS="--secure-token-admin-account-name '$loggedinusername' --secure-token-admin-password '$loggedinpassword'"
+    logIt "$SECURE_ADMIN details provided."
+
+    MKUSER_OPTIONS="--secure-token-admin-account-name '$SECURE_ADMIN' --secure-token-admin-password '$SECURE_PASS'"
+    
+    # remove (if existing and not logged into) our admin account
+    
+    # code to be added
+    
+    
+    unset SECURE_PASS
+    unset SECURE_ADMIN
    ;|
    *)
     # Setup Startup after restart
@@ -694,9 +761,13 @@ case $1 in
     
     # Add complete setup
     trackNow "$TEMP_NAME - Initial Setup account" \
-     secure "'$C_MKUSER' --username '$TEMP_ADMIN' --password '$( settingsPlist read temp | base64 -d )' --real-name '$TEMP_NAME' --home /Users/$TEMP_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --automatic-login --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes $MKUSER_OPTIONS" "Creating username $TEMP_ADMIN with mkuser" \
+     secure "'$C_MKUSER' --username '$TEMP_ADMIN' --password '$( readSaved temp )' --real-name '$TEMP_NAME' --home /Users/$TEMP_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --automatic-login --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes $MKUSER_OPTIONS" "Creating username $TEMP_ADMIN with mkuser" \
      file "/Users/$TEMP_ADMIN" 'SF=person.badge.plus'
     
+    if [ "$DEMOTE_ADMIN" != "" ]; then
+     logIt "Removing $DEMOTE_ADMIN from Admins group"
+     dseditgroup -o edit -d "$DEMOTE_ADMIN" -t user admin >> "$LOG_FILE" 2>&1
+    fi
     # Block Self Service macOS Onboarding for TEMP_ADMIN account, we want to use Self Service to
     #  help with installing, and as such can't have Self Service macOS Onboarding getting in the way
     runIt "sudo -u '$TEMP_ADMIN' mkdir -p '/Users/$TEMP_ADMIN/Library/Preferences'"
@@ -716,6 +787,17 @@ case $1 in
     # sleep 30
    ;;
    *)
+    # Escrow BootStrap Token
+    logIt "Escrowing BootStrap Token - required for manual enrolments and re-enrolments."
+    EXPECT_SCRIPT="expect -c \""
+    EXPECT_SCRIPT+="spawn profiles install -type bootstraptoken ;"
+    EXPECT_SCRIPT+=" expect \\\"Enter the admin user name:\\\" ;"
+    EXPECT_SCRIPT+=" send \\\"$TEMP_ADMIN\\r\\\" ;"
+    EXPECT_SCRIPT+=" expect \\\"Enter the password for user '$TEMP_ADMIN':\\\" ;"
+    EXPECT_SCRIPT+=" send \\\"$( readSaved temp )\\r\\\" ;"
+    EXPECT_SCRIPT+=" expect \\\"profiles: Bootstrap Token escrowed\\\"\""
+    eval "$EXPECT_SCRIPT" >> "$LOG_FILE" 2>&1
+
     # trigger processing
     runIt "'$C_ENROLMENT' process >> /dev/null 2>&1"
    ;;
@@ -808,6 +890,7 @@ case $1 in
   sleep 5
   
   if [ "$( jq 'listitem[.currentitem+1].status' )" != "success" ]; then
+    
    # skip this if the computer has been restarted...
    
    # finishing setting up admin accounts
@@ -849,7 +932,7 @@ case $1 in
   else
    $JAMF_ADMIN="$( jq 'listitem[.currentitem+1].jssname' )"
   fi
-   
+
   trackNow "$JAMF_ADMIN - Jamf Pro management account" \
    secure "'$C_MKUSER' --username $JAMF_ADMIN --password '$JAMF_PASS' --real-name '$JAMF_ADMIN Account' --home /private/var/$JAMF_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes --secure-token-admin-account-name '$TEMP_ADMIN' --secure-token-admin-password '$( readSaved temp )'" "Creating username $JAMF_ADMIN" \
    file "/private/var/$JAMF_ADMIN" 'SF=person.badge.plus'
@@ -953,8 +1036,7 @@ case $1 in
     if [ "$( listRead "installs.$( jq 'installCount' ).title" )" != "" ] && [ "$( listRead "installs.$( jq 'installCount' ).commandtype" )" != "" ] ; then
      trackNew "$( listRead "installs.$( jq 'installCount' ).title" )"
      if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
-      COMMAND="$( listRead "installs.$( jq 'installCount' ).command" )"
-      track update command "$COMMAND"
+      track update command "$( listRead "installs.$( jq 'installCount' ).command" )"
       track update commandtype "$( listRead "installs.$( jq 'installCount' ).commandtype" )"
       track update suppliedsubtitle "$( listRead "installs.$( jq 'installCount' ).subtitle" )"
       SUBTITLE_TYPE="$( listRead "installs.$( jq 'installCount' ).subtitletype" )"
@@ -963,16 +1045,15 @@ case $1 in
       else
        track update subtitletype "$SUBTITLE_TYPE"
       fi
-      COMMAND="$( subtitleType commandtype "$COMMAND" )"
       case "$( jq 'listitem[.currentitem].subtitletype' )" in
        replace|secure)
         track update subtitle "$( jq 'listitem[.currentitem].suppliedsubtitle' )"
        ;;
        command)
-        track update subtitle "$COMMAND"
+        track update subtitle "$( subtitleType )"
        ;;
        combine)
-        track update subtitle "$( jq 'listitem[.currentitem].suppliedsubtitle' ) - $COMMAND"
+        track update subtitle "$( jq 'listitem[.currentitem].suppliedsubtitle' ) - $( subtitleType )"
        ;;
       esac
       track update successtype "$( listRead "installs.$( jq 'installCount' ).successtype" )"
@@ -1076,13 +1157,12 @@ case $1 in
         if [ $COUNT -eq $PER_APP ] && [ "$( jq 'listitem[.currentitem].backuptype' )" != "none" ]; then
          track update commandtype "$( jq 'listitem[.currentitem].backuptype' )"
          track update command "$( jq 'listitem[.currentitem].backupcommand' )"
-         COMMAND="$( subtitleType backuptype "$( jq 'listitem[.currentitem].backupcommand' )" )"
          case "$( jq 'listitem[.currentitem].subtitletype' )" in
           replace|command)
-           track update subtitle "$COMMAND"
+           track update subtitle "$( subtitleType )"
           ;;
           combine)
-           track update subtitle "$( jq 'listitem[.currentitem].suppliedsubtitle' ) - $COMMAND"
+           track update subtitle "$( jq 'listitem[.currentitem].suppliedsubtitle' ) - $( subtitleType )"
           ;;
          esac
         fi
@@ -1161,9 +1241,9 @@ case $1 in
    EMAIL_BODY+="Estimated Finish:  $( date -jr "$FINISH_TIME" "+%d/%m/%Y %H:%M %Z" )\n"
    EMAIL_BODY+="Finished at: $( date -jr "$FINISHED" "+%d/%m/%Y %H:%M %Z" )\n"
    EMAIL_BODY+="Apps to Install: $( jq 'installCount' )\n"
-   INFOBOX+="Installed: $SUCCESS_COUNT\n"
-   INFOBOX+="Failed: $FAILED_COUNT\n"
-   INFOBOX+="Completed Tasks: $FULLSUCCESS_COUNT\n"
+   EMAIL_BODY+="Installed: $SUCCESS_COUNT\n"
+   EMAIL_BODY+="Failed: $FAILED_COUNT\n"
+   EMAIL_BODY+="Completed Tasks: $FULLSUCCESS_COUNT\n"
    EMAIL_BODY+="\nThe initial log is available at "
    EMAIL_BODY+="<a href= \"${JAMF_URL}computers.html?id=$( defaultRead jssID )&o=r&v=history\">${JAMF_URL}computers.html?id=$( defaultRead jssID )&o=r&v=history</a>,\n"
    EMAIL_BODY+="with full logs available in the /Library/Logs folder on the computer.\n"
