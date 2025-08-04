@@ -57,7 +57,9 @@
       "enum": [
        "command",
        "install",
+       "jac",
        "policy",
+       "mas",
        "selfservice",
        "none"
       ],
@@ -65,7 +67,9 @@
        "enum_titles": [
         "Shell command",
         "Installomator",
+        "Jamf App Installer",
         "Jamf Policy",
+        "Mac App Store",
         "Self Service URL",
         "Test only"
        ]

@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.0c"
+VERSION="1.0k"
 
 # Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -253,7 +253,7 @@ trackIt() {
    track update statustext "Checking..."
   ;;
   pause)
-   track update statustext "Paused."
+   track update statustext "Paused"
   ;;
   *)
    track update statustext "$THE_COUNT Running..."
@@ -262,7 +262,9 @@ trackIt() {
  if ! $TEST_ONLY || [[ "$3" = (result|stamp|date|pause) ]]; then
   case $1 in
    command|secure)
-    track update statustext "Attempt$( if [ "$THE_COUNT" = "" ]; then echo "ing" ; else echo "$THE_COUNT at" ; fi ) the command..."
+    if [[ "$3" != (date|pause|stamp) ]]; then
+     track update statustext "Attempt$( if [ "$THE_COUNT" = "" ]; then echo "ing" ; else echo "$THE_COUNT at" ; fi ) the command..."
+    fi
    ;|
    secure)
     runIt "$2" "$( echo "$2" | awk -F '(p|P)assword' '{ print $1 }' )... (hidden)"
@@ -278,6 +280,12 @@ trackIt() {
     track update statustext "Attempt$( if [ "$THE_COUNT" = "" ]; then echo "ing" ; else echo "$THE_COUNT at" ; fi ) the install..."
     runIt "$C_INSTALL $2 NOTIFY=silent $GITHUBAPI"
    ;;
+   jac)
+    track update statustext "Waiting for Jamf App Installer to install..."
+   ;|
+   mas)
+    track update statustext "Waiting for Mac App Store to install..."
+   ;|
    selfservice)
     if [ "$( jq 'listitem[.currentitem].lastattempt' )" = "" ] || [ $( date "+%s" ) -ge $(($( jq 'listitem[.currentitem].lastattempt' )+$PER_APP*120)) ]; then
      track update statustext "Asking Self Service to execute..."
@@ -300,10 +308,10 @@ trackIt() {
    fi
   ;&
   date)
-   track update statustext "Last Updated - $( date "+%Y-%m-%d %H-%M-%S %Z" )"
+   track update statustext "Last Updated - $( date "+%Y-%m-%d %H:%M:%S %Z" )"
   ;|
   pause)
-   track update statustext "Resumed."
+   track update statustext "Resumed"
   ;|
   stamp|date|pause)
    track update status pending
@@ -334,6 +342,8 @@ trackIt() {
   ;|
   file)
    THE_TEST="[ -e '$4' ]"
+   RESPONSE="Found $4"
+   ERR_RESPONSE="$4 Not Found"
   ;|
   test)
    THE_TEST="$4"
@@ -350,7 +360,12 @@ trackIt() {
     return 0
    else
     track update status error
-    track update statustext "Test$THE_COUNT Failed..."
+    if [ "$ERR_RESPONSE" = "" ]; then
+     track update statustext "Test$THE_COUNT Failed..."
+    else
+     track update statustext "$ERR_RESPONSE"
+     unset ERR_RESPONSE
+    fi
     return 1
    fi
   ;;
@@ -403,7 +418,7 @@ trackNow() {
     repeatIt "$2" "$3" "$5" "$6"
    ;;
    policy)
-    track update subtitle "Jamf Event - $3"
+    track update subtitle "Jamf Policy - $3"
    ;|
    install)
     track update subtitle "Installomator Label - $3"
@@ -422,6 +437,27 @@ trackNow() {
   # Process error here?
   return $THE_RESULT
  fi
+}
+
+subtitleType() {
+ THE_COMMAND=$2
+ case "$( jq "listitem[.currentitem].$1" )" in
+  selfservice)
+   THE_COMMAND="Self Service - $2"
+  ;;
+  policy)
+   THE_COMMAND="Jamf Policy - $2"
+  ;;
+  install)
+   THE_COMMAND="Installomator Label - $2"
+  ;;
+  jac)
+   THE_COMMAND="Jamf App Installer"
+  ;;
+  mas)
+   THE_COMMAND="Mac App Store"
+  ;;
+ esac
 }
 
 # Lets get started
@@ -810,11 +846,14 @@ case $1 in
     "$C_DIALOG" --ontop --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account password from Jamf Pro API"
     errorIt 2 "this should not have happened, unable to get Jamf Managed Account Password:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
    fi
+  else
+   $JAMF_ADMIN="$( jq 'listitem[.currentitem+1].jssname' )"
   fi
    
   trackNow "$JAMF_ADMIN - Jamf Pro management account" \
    secure "'$C_MKUSER' --username $JAMF_ADMIN --password '$JAMF_PASS' --real-name '$JAMF_ADMIN Account' --home /private/var/$JAMF_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes --secure-token-admin-account-name '$TEMP_ADMIN' --secure-token-admin-password '$( readSaved temp )'" "Creating username $JAMF_ADMIN" \
    file "/private/var/$JAMF_ADMIN" 'SF=person.badge.plus'
+  track update jssname "$JAMF_ADMIN"
     
   # Add or update LAPS ADMIN
   if [ -e "/Users/$LAPS_ADMIN" ]; then
@@ -836,7 +875,7 @@ case $1 in
   track update icon 'SF=checklist'
   track update status pending
   track update statustext "Loading..."
-  track update subtitle "Loading the task list(s) from config profile(s)."
+  track update subtitle "Loading the task list(s) from config profile(s)"
   track integer trackitem ${$( jq 'currentitem' ):--1}
 
   runIt "plutil -convert json -o '$INSTALLS_JSON' '$DEFAULTS_FILE'"
@@ -852,58 +891,54 @@ case $1 in
    runIt "plutil -insert listitem -array '$INSTALLS_JSON'"
   fi
   if [ "$( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )" -gt 0 ]; then
-   track update statustext "Loaded."
+   track update statustext "Loaded"
    track update status success
    LIST_FILES="$( eval "ls '$DEFAULTS_BASE-'*" 2>/dev/null )"
    logIt "Additional Config Files to load: $LIST_FILES"
    for LIST_FILE in ${(@f)LIST_FILES} ; do
     logIt "Reading Config File: $LIST_FILE"
     if [ "$( plutil -extract 'installs' raw -o - "$LIST_FILE" 2>/dev/null )" -gt 0 ]; then
-     THE_TITLE="$( plutil -extract 'title' raw -o - "$LIST_FILE" )"
+     CURRENT_INSTALLS="$( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )"
+     THE_TITLE="$( plutil -extract 'name' raw -o - "$LIST_FILE" )"
      if [ "$THE_TITLE" = "" ]; then
-      THE_TITLE="$( echo "$LIST_FILE" | sed -E 's/.*-(.*)\.plist$/\1/' )"
+      THE_TITLE="$( echo "$LIST_FILE" | sed -E "s=^$DEFAULTS_BASE-(.*)\.plist\$=\\1=" )"
      fi
-     plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loading task list $THE_TITLE" "$TRACKER_JSON"
-     echo "listitem: index: $( jq 'trackitem' ), statustext: Loading task list $THE_TITLE" >> "$TRACKER_COMMAND"
+     plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loading task list $THE_TITLE..." "$TRACKER_JSON"
+     echo "listitem: index: $( jq 'trackitem' ), statustext: Loading task list $THE_TITLE..." >> "$TRACKER_COMMAND"
      sleep 0.1
      trackNew "$THE_TITLE"
      if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
       track update subtitle "$( plutil -extract 'subtitle' raw -o - "$INSTALLS_JSON" )"
+      track update icon 'SF=doc.text'
       track update status wait
-      track update status text "Loading..."
+      track update statustext "Loading $LIST_FILE..."
       for (( i = 0; i < $( plutil -extract 'installs' raw -o - "$LIST_FILE" 2>dev/null ); i++ )); do
-       runIt "plutil -insert 'installs' -json '\$( plutil -extract 'installs.$i' json -o - '$LIST_FILE' )' -append '$INSTALLS_JSON'"
+       ADD_THIS="$( plutil -extract "installs.$i" json -o - "$LIST_FILE" )"
+       logIt "Adding: $ADD_THIS"
+       plutil -insert 'installs' -json "$ADD_THIS" -append "$INSTALLS_JSON"
+       logIt "Installs: $( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )"
       done
-      track update statustext "Loaded."
-      track update status success
+      if [ $( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null ) -gt $CURRENT_INSTALLS ]; then
+       track update statustext "Loaded"
+       track update status success
+      else
+       track update statustext "Loading $LIST_FILE failed"
+       track update status error
+      fi
      fi
     fi
    done
    plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Config Profile(s) loaded. Loading Tasks..." "$TRACKER_JSON"
    echo "listitem: index: $( jq 'trackitem' ), statustext: Config Profile(s) loaded. Loading Tasks..." >> "$TRACKER_COMMAND"
    sleep 1
-
-
-  
-#  if [ "$( defaults read "$DEFAULTS_FILE" installs 2>/dev/null )" != "" ]; then
-#   INSTALLS_JSON="$DEFAULTS_FILE"
-   
-#   trackNew "Task List"
-#   track update icon 'SF=checklist'
-#   track update status pending
-#   track update statustext "Loading..."
-#  track update subtitle "Loading the task list from the config profile."
-   # Identify index of first cycling check item, until now each item would retry automatically
-   #  immediately for up to 5 time, now we want to switch to trying everything else before retrying,
-   #  and keep going until everything is successful, or a specified timeout (at 5 minutes per item?).
-#   track integer trackitem ${$( jq 'currentitem' ):--1}
-   
    
    track integer startitem $(($( jq 'currentitem' )+1))
-    
+   
    # load software installs
    track integer 'installCount' 0
-   track update status wait
+   plutil -replace listitem.$( jq 'trackitem' ).status -string "wait" "$TRACKER_JSON"
+   echo "listitem: index: $( jq 'trackitem' ), status: wait" >> "$TRACKER_COMMAND"
+   sleep 1
 
    infoBox
    
@@ -915,92 +950,90 @@ case $1 in
     sleep 0.1
     
     # for each item in config profile
-    
-    trackNew "$( listRead "installs.$( jq 'installCount' ).title" )"
-    if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
-     COMMAND="$( listRead "installs.$( jq 'installCount' ).command" )"
-     track update command "$COMMAND"
-     track update commandtype "$( listRead "installs.$( jq 'installCount' ).commandtype" )"
-     track update suppliedsubtitle "$( listRead "installs.$( jq 'installCount' ).subtitle" )"
-     track update subtitletype "$( listRead "installs.$( jq 'installCount' ).subtitletype" )"
-     case "$( jq 'listitem[.currentitem].commandtype' )" in
-      selfservice)
-       COMMAND="Self Service - $COMMAND"
-      ;;
-      policy)
-       COMMAND="Jamf Event - $COMMAND"
-      ;;
-      install)
-       COMMAND="Installomator Label - $COMMAND"
-      ;;
-     esac
-     case "$( jq 'listitem[.currentitem].subtitletype' )" in
-      replace|secure)
-       track update subtitle "$( jq 'listitem[.currentitem].suppliedsubtitle' )"
-      ;;
-      command)
-       track update subtitle "$COMMAND"
-      ;;
-      combine)
-       track update subtitle "$( jq 'listitem[.currentitem].suppliedsubtitle' ) - $COMMAND"
-      ;;
-     esac
-     track update successtype "$( listRead "installs.$( jq 'installCount' ).successtype" )"
-     track update successtest "$( listRead "installs.$( jq 'installCount' ).successtest" )"
-     track update successteam "$( listRead "installs.$( jq 'installCount' ).successteam" )"
-     THE_ICON="$( listRead "installs.$( jq 'installCount' ).icon" )"
-     if [ "$THE_ICON" = "" ]; then
-      track update icon none
-     else
-      case $THE_ICON; in
-       http*)
-        # Cache the icon locally, as scrolling the window causes swiftDialog to reload the icons, which is
-        #  not so good when they are hosted, so downloading them to a folder and directing swiftDialog to
-        #  the downloaded copy makes much more sense.
-        ICON_NAME="$CACHE/$( basename "$THE_ICON" )"
-        runIt "curl -s -o '$ICON_NAME' '$THE_ICON'"
-        THE_ICON="$CACHE/icon-$( jq 'installCount' )-$( jq 'currentitem' ).png"
-        runIt "sips -s format png '$ICON_NAME' --out '$THE_ICON'"
-       ;&
-       *)
-        track update icon "$THE_ICON"
+    if [ "$( listRead "installs.$( jq 'installCount' ).title" )" != "" ] && [ "$( listRead "installs.$( jq 'installCount' ).commandtype" )" != "" ] ; then
+     trackNew "$( listRead "installs.$( jq 'installCount' ).title" )"
+     if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
+      COMMAND="$( listRead "installs.$( jq 'installCount' ).command" )"
+      track update command "$COMMAND"
+      track update commandtype "$( listRead "installs.$( jq 'installCount' ).commandtype" )"
+      track update suppliedsubtitle "$( listRead "installs.$( jq 'installCount' ).subtitle" )"
+      SUBTITLE_TYPE="$( listRead "installs.$( jq 'installCount' ).subtitletype" )"
+      if [ "$SUBTITLE_TYPE" = "" ]; then
+       track update subtitletype command
+      else
+       track update subtitletype "$SUBTITLE_TYPE"
+      fi
+      COMMAND="$( subtitleType commandtype "$COMMAND" )"
+      case "$( jq 'listitem[.currentitem].subtitletype' )" in
+       replace|secure)
+        track update subtitle "$( jq 'listitem[.currentitem].suppliedsubtitle' )"
+       ;;
+       command)
+        track update subtitle "$COMMAND"
+       ;;
+       combine)
+        track update subtitle "$( jq 'listitem[.currentitem].suppliedsubtitle' ) - $COMMAND"
        ;;
       esac
+      track update successtype "$( listRead "installs.$( jq 'installCount' ).successtype" )"
+      track update successtest "$( listRead "installs.$( jq 'installCount' ).successtest" )"
+      track update successteam "$( listRead "installs.$( jq 'installCount' ).successteam" )"
+      THE_ICON="$( listRead "installs.$( jq 'installCount' ).icon" )"
+      if [ "$THE_ICON" = "" ]; then
+       track update icon none
+      else
+       case $THE_ICON; in
+        http*)
+         # Cache the icon locally, as scrolling the window causes swiftDialog to reload the icons, which is
+         #  not so good when they are hosted, so downloading them to a folder and directing swiftDialog to
+         #  the downloaded copy makes much more sense.
+         ICON_NAME="$CACHE/$( basename "$THE_ICON" )"
+         runIt "curl -s -o '$ICON_NAME' '$THE_ICON'"
+         THE_ICON="$CACHE/icon-$( jq 'installCount' )-$( jq 'currentitem' ).png"
+         runIt "sips -s format png '$ICON_NAME' --out '$THE_ICON'"
+        ;&
+        *)
+         track update icon "$THE_ICON"
+        ;;
+       esac
+      fi
+      
+      THE_BACKUPTYPE="$( listRead "installs.$( jq 'installCount' ).backuptype" )"
+      if [ "$THE_BACKUPTYPE" = "" ]; then
+       track update backuptype 'none'
+      else
+       track update backuptype "$THE_BACKUPTYPE"
+      fi
+      track update backupcommand "$( listRead "installs.$( jq 'installCount' ).backupcommand" )"
+      track update status pending
+      track update statustext "waiting to install..."
      fi
-     track update backuptype "$( listRead "installs.$( jq 'installCount' ).backuptype" )"
-     track update backupcommand "$( listRead "installs.$( jq 'installCount' ).backupcommand" )"
-     track update status pending
-     track update statustext "waiting to install..."
+     infoBox
+     track integer installCount $(($( jq 'installCount' )+1))
     fi
-    infoBox
-    track integer installCount $(($( jq 'installCount' )+1))
    done
 
    plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Inserting Pause & Inventory Update..." "$TRACKER_JSON"
    echo "listitem: index: $( jq 'trackitem' ), statustext: Inserting Pause & Inventory Update..." >> "$TRACKER_COMMAND"
    sleep 1
 
-#   if [ $(($( jq 'startitem' )+$( listRead 'installs' ))) -eq $( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" ) ]; then
-    trackNew "Pause for 30 seconds"
-    if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
-     track update icon 'SF=pause.circle'
-     track update command "sleep 30"
-     track update commandtype none
-     track update subtitle "30 second pause for Managed & Self Service tasks."
-     track update successtype "pause"
-    fi
-#   fi
+   trackNew "Pause for 30 seconds"
+   if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
+    track update icon 'SF=pause.circle'
+    track update command "sleep 30"
+    track update commandtype none
+    track update subtitle "30 second pause for Managed & Self Service tasks"
+    track update successtype "pause"
+   fi
    sleep 1
-#   if [ $(($( jq 'startitem' )+$( listRead 'installs' )+1)) -eq $( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" ) ]; then
-    trackNew "Inventory Update"
-    if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
-     track update icon 'SF=list.bullet.rectangle'
-     track update command "'$C_JAMF' recon"
-     track update commandtype command
-     track update subtitle "Updates inventory once every $PER_APP minutes"
-     track update successtype "stamp"
-    fi
-#   fi
+   trackNew "Inventory Update"
+   if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
+    track update icon 'SF=list.bullet.rectangle'
+    track update command "'$C_JAMF' recon"
+    track update commandtype command
+    track update subtitle "Updates inventory once every $PER_APP minutes"
+    track update successtype "stamp"
+   fi
    
    sleep 1
    
@@ -1017,6 +1050,7 @@ case $1 in
    infoBox
    COUNT=1
    logIt "========================= Process Tasks ========================="
+   logIt "Number of Install tasks: $( jq 'installCount' )"
    # On first run, whether restarted or not, test to see if an task has already completed
    # Excludes the result test, as well as date, stamp, and pause
    TEST_ONLY=true
@@ -1024,7 +1058,7 @@ case $1 in
     track integer currentitem $( jq 'startitem' )
     SUCCESS_COUNT=0
     until [ $( jq 'currentitem' ) -ge $( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" ) ]; do
-     logIt "Running Task $( jq 'currentitem' )"
+     logIt "Running Task $( jq 'currentitem' ), SUCCESS_COUNT = $SUCCESS_COUNT"
      if [ "$SUCCESS_COUNT" -eq $( jq 'installCount' ) ]; then
       track update status success
      elif [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
@@ -1039,21 +1073,10 @@ case $1 in
         infoBox
        ;;
        error)
-        if [ $COUNT -eq $PER_APP ]; then
+        if [ $COUNT -eq $PER_APP ] && [ "$( jq 'listitem[.currentitem].backuptype' )" != "none" ]; then
          track update commandtype "$( jq 'listitem[.currentitem].backuptype' )"
          track update command "$( jq 'listitem[.currentitem].backupcommand' )"
-         COMMAND="$( jq 'listitem[.currentitem].backupcommand' )"
-         case "$( jq 'listitem[.currentitem].backuptype' )" in
-          selfservice)
-           COMMAND="Self Service - $COMMAND"
-          ;;
-          policy)
-           COMMAND="Jamf Event - $COMMAND"
-          ;;
-          install)
-           COMMAND="Installomator Label - $COMMAND"
-          ;;
-         esac
+         COMMAND="$( subtitleType backuptype "$( jq 'listitem[.currentitem].backupcommand' )" )"
          case "$( jq 'listitem[.currentitem].subtitletype' )" in
           replace|command)
            track update subtitle "$COMMAND"
@@ -1088,7 +1111,7 @@ case $1 in
    FULLSUCCESS_COUNT=0
    FAILED_COUNT=0
    track integer currentitem 0
-   until [ $( jq 'currentitem' ) -ge $( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" ) ]; do
+   until [ "$( jq 'listitem[.currentitem].title' )" = "Checking Status" ]; do
     case "$( jq 'listitem[.currentitem].status' )" in
      pending)
       track update status success
@@ -1096,14 +1119,13 @@ case $1 in
      success)
       ((FULLSUCCESS_COUNT++))
      ;;
-     error)
+     *)
       ((FAILED_COUNT++))
       track update status fail
      ;;
     esac
     track integer currentitem $(($( jq 'currentitem' )+1))
    done
-   track integer currentitem $(($( jq 'currentitem' )-1))
    track update status success
    track update statustext "Checked"
    FINISHED="$( date "+%s" )"
