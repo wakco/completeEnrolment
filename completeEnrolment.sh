@@ -1,9 +1,9 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.0p"
+VERSION="1.0q"
 
-# Commands
+# MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
 
 C_JAMF="/usr/local/bin/jamf"
@@ -12,7 +12,7 @@ C_DIALOG="/Library/Application Support/Dialog/Dialog.app/Contents/MacOS/Dialog"
 C_MKUSER="/usr/local/bin/mkuser"
 C_ENROLMENT="/usr/local/bin/completeEnrolment"
 
-# Variables
+# MARK: Variables
 
 DEFAULTS_NAME="completeEnrolment"
 # If you change DEFAULTS_NAME, make sure the domain in the config profiles matches, or it won't work
@@ -40,7 +40,7 @@ fi
 CPU_ARCH="$( arch )"
 TEST_ONLY=false
 
-# Whose logged in
+# MARK: Whose logged in
 
 # The who command method is used as it is the only one that reliably returns _mbsetupuser as used by
 # Setup Assistant, confirming it as the only username logged into the console is the best way to
@@ -56,7 +56,7 @@ fi
 # so we can use ^ for everything other than this matches in case statements
 setopt extended_glob
 
-# prefer jq
+# MARK: prefer jq
 if [ -e /usr/bin/jq ]; then
  # jq "alias"
  jq() {
@@ -93,7 +93,7 @@ fi
 
 LOG_FILE="$LIB/Logs/$DEFAULTS_NAME-$( if [ "$1" = "/" ]; then echo "Jamf" ; else echo "$1" ; fi )-$WHO_LOGGED-$( date "+%Y-%m-%d %H-%M-%S %Z" ).log"
 
-# Functions
+# MARK: Functions
 
 errorIt() {
  logIt "$2" >&2
@@ -138,6 +138,7 @@ runIt() {
  return $THE_RETURN
 }
 
+# MARK: mailSend
 mailSend() {
  if [ "$EMAIL_AUTH" != "" ] && [ "$( settingsPlist read email )" != "" ] && [[ "$EMAIL_SMTP" = *":"* ]]; then
   logIt "Attempting to send email with details:\nTo be sent via: $EMAIL_SMTP\nFrom: $1\nTo: ${AUTH_SMTP[@]}\nHidden by: $2\nSubject: $3\n\n$4\n"
@@ -162,6 +163,31 @@ mailSend() {
  fi
 }
 
+# MARK: subtitleType
+subtitleType() {
+ case $( jq 'listitem[.currentitem].commandtype' ) in
+  selfservice)
+   echo "Self Service - $( jq 'listitem[.currentitem].command' )"
+  ;;
+  policy)
+   echo "Jamf Policy - $( jq 'listitem[.currentitem].command' )"
+  ;;
+  install)
+   echo "Installomator Label - $( jq 'listitem[.currentitem].command' )"
+  ;;
+  jac)
+   echo "Jamf App Installer"
+  ;;
+  mas)
+   echo "Mac App Store"
+  ;;
+  *)
+   echo "$( jq 'listitem[.currentitem].command' )"
+  ;;
+ esac
+}
+
+# MARK: infoBox
 infoBox() {
  INFOBOX="**macOS $( sw_vers -productversion )** on  <br>$( scutil --get ComputerName )  <br><br>"
  if [ "$( jq 'startdate' )" != "" ]; then
@@ -204,6 +230,7 @@ infoBox() {
  logIt "$INFOBOX"
 }
 
+# MARK: track
 track() {
  local THE_STRING="$( echo "$3" | tr -d '"' )"
  case $1 in
@@ -240,7 +267,7 @@ track() {
  esac
 }
 
-# for trackIt and repeatIt:
+# MARK: trackIt
 # command type (command/policy/label), (shell command, jamf policy trigger, or Installomator label),
 #  status confirmation type, file to check for (for status confirmation type: file), Team ID
 trackIt() {
@@ -383,6 +410,7 @@ trackIt() {
  esac
 }
 
+# MARK: repeatIt
 repeatIt() {
  COUNT=1
  until [ $COUNT -gt $PER_APP ] || trackIt "$1" "$2" "$3" "$4"; do
@@ -405,6 +433,7 @@ repeatIt() {
  fi
 }
 
+# MARK: trackNew
 trackNew() {
  if [ "$( jq 'listitem[.currentitem+1].title' )" = "$1" ]; then
   track integer currentitem $(($( jq 'currentitem' )+1))
@@ -417,6 +446,7 @@ trackNew() {
 # title, command type (command/policy/label), (shell command, jamf policy trigger, or Installomator
 #  label), subtitle (where command type is secure), status confirmation type, file to check for (for
 #  status confirmation type: file)
+# MARK: trackNow
 trackNow() {
  trackNew "$1"
  if [ "$( jq 'listitem[.currentitem].status' )" = "success" ]; then
@@ -453,30 +483,7 @@ trackNow() {
  fi
 }
 
-subtitleType() {
- case $( jq 'listitem[.currentitem].commandtype' ) in
-  selfservice)
-   echo "Self Service - $( jq 'listitem[.currentitem].command' )"
-  ;;
-  policy)
-   echo "Jamf Policy - $( jq 'listitem[.currentitem].command' )"
-  ;;
-  install)
-   echo "Installomator Label - $( jq 'listitem[.currentitem].command' )"
-  ;;
-  jac)
-   echo "Jamf App Installer"
-  ;;
-  mas)
-   echo "Mac App Store"
-  ;;
-  *)
-   echo "$( jq 'listitem[.currentitem].command' )"
-  ;;
- esac
-}
-
-# Lets get started
+# MARK: Lets get started
 
 caffeinate -dimsuw $$ &
 
@@ -485,7 +492,7 @@ until [ -e "$DEFAULTS_FILE" ]; do
  sleep 1
 done
 
-# Load common settings
+# MARK: Load common settings
 
 DIALOG_ICON="${"$( defaultRead dialogIcon )":-"caution"}"
 ADMIN_ICON="${"$( defaultRead adminPicture )":-"--no-picture"}"
@@ -507,9 +514,9 @@ LAPS_ADMIN="${"$( defaultRead lapsAdmin )":-"laps_admin"}"
 LAPS_NAME="${"$( defaultRead lapsName )":-"LAPS Admin"}"
 PER_APP=${"$( defaultRead perAPP )":-"5"}
 
-# And start processing
 
 case $1 in
+ # MARK: Jamf Enrolment
  /)
   # Install completeEnrolment
   logIt "Installing $C_ENROLMENT..."
@@ -517,6 +524,7 @@ case $1 in
   
   # Load & save command line settings from Jamf Pro
   # $4, $5, $6, $7, $8, $9, $10, $11 ?
+  # MARK: Load command line settings
   if [ "$4" = "" ]; then
    GITHUBAPI=""
   else
@@ -547,10 +555,10 @@ case $1 in
   settingsPlist write email -string "$9"
 
 
-  # Initialise dialog setup file, our "tracker"
-  # although plutil can create an empty json, it can't insert into it, incorrectly mistaking the
-  # file to be in another format (OpenStep), so we'll just add an item with an echo
-  echo '{"title":"none"}' > "$TRACKER_JSON"
+  # MARK: Initialise dialog setup file
+  #  our "tracker", although plutil can create an empty json, it can't insert into it, incorrectly
+  #  mistaking the file to be in another format (OpenStep), so we'll just add an item with an echo
+  echo "{\"thisfile\":\"This file was created by completeEnrolment $VERSION\"}" > "$TRACKER_JSON"
   track string title "Welcome to ${"$( defaultRead corpName )":-"The Service Desk"}"
   track string message "Please wait while this computer is set up...<br>Log File available at: $LOG_FILE"
   track string icon "$DIALOG_ICON"
@@ -564,7 +572,7 @@ case $1 in
   track string liststyle "compact"
   plutil -replace displaylog -string "$LOG_FILE" "$LOG_JSON"
 
-  # set time
+  # MARK: set time
   TIME_ZONE="${"$( defaultRead systemTimeZone )":-"$( systemsetup -gettimezone | awk "{print \$NF}" )"}"
   trackNow "Setting Time Zone" \
    command "/usr/sbin/systemsetup -settimezone '$TIME_ZONE'" \
@@ -580,12 +588,13 @@ case $1 in
    result '' 'SF=clock'
   sleep 2
   
-  # Load infoBox
+  # update infobox
   track string starttime "$( date "+%s" )"
   track string startdate "$( date -jr "$( jq starttime )" "+%d/%m/%Y %H:%M %Z" )"
   infoBox
   
-  # Install Rosetta (just in case, and skip it for macOS 28+)
+  # MARK: Install Rosetta
+  #  (just in case, and skip it for macOS 28+)
   if [ "$CPU_ARCH" = "arm64" ] && [ $(sw_vers -productVersion | cut -d '.' -f 1) -lt 28 ]; then
    trackNow "Installing Rosetta for Apple Silicon Mac Intel compatibility" \
     command "/usr/sbin/softwareupdate --install-rosetta --agree-to-license" \
@@ -593,13 +602,13 @@ case $1 in
    sleep 2
   fi
   
-  # Install initial file
+  # MARK: Install initial files
   INSTALL_POLICY="${"$( defaultRead policyInitialFiles )":-"installInitialFiles"}"
   trackNow "Installing Initial Files" \
    policy "$INSTALL_POLICY" \
    file "$DIALOG_ICON" 'SF=square.and.arrow.down.on.square'
 
-  # Install Installomator
+  # MARK: Install Installomator
   # This can be either the custom version from this repository, or the script that installs the
   # official version.
   INSTALL_POLICY="${"$( defaultRead policyInstallomator )":-"installInstallomator"}"
@@ -607,7 +616,7 @@ case $1 in
    policy "$INSTALL_POLICY" \
    file "/usr/local/Installomator/Installomator.sh" 'SF=square.and.arrow.down.badge.checkmark'
   
-  # Install swiftDialog
+  # MARK: Install swiftDialog
   trackNow "Installing swiftDialog (the software generating this window)" \
    install dialog \
    file "$C_DIALOG" 'SF=macwindow.badge.plus'
@@ -620,6 +629,7 @@ case $1 in
   # the access to some of the information to say only during the first 24 hours (at least coming
   # from Jamf Pro that way).
   case $WHO_LOGGED in
+   # MARK: Prestage Enrolment
    _mbsetupuser)
     # Get setup quickly and start atLoginWindow for initial step tracking followed by a restart.
     # This includes creating a temporary admin account with automatic login status to get the first
@@ -631,7 +641,7 @@ case $1 in
     runIt "defaults write $LIB/Preferences/com.apple.loginwindow.plist AdminHostInfo -string HostName"
     runIt "defaults write $LIB/Preferences/com.apple.loginwindow.plist SHOWFULLNAME -bool true"
         
-    # Restart the login window
+    # MARK: Restart the login window
     runIt "/usr/bin/defaults write /Library/Preferences/com.apple.loginwindow.plist LoginwindowText 'Enrolled at $( /usr/bin/profiles status -type enrollment | /usr/bin/grep server | /usr/bin/awk -F '[:/]' '{ print $5 }' )\nplease wait while initial configuration in performed...\nThis computer will restart shortly.'"
     sleep 2
     
@@ -640,7 +650,7 @@ case $1 in
      runIt "pkill loginwindow"
     fi
 
-    # start loginwindow
+    # MARK: Start dialog on loginwindow
     sleep 2
     defaults write "$LOGIN_PLIST" LimitLoadToSessionType -array "LoginWindow"
     defaults write "$LOGIN_PLIST" Label "$DEFAULTS_NAME.loginwindow"
@@ -656,6 +666,7 @@ case $1 in
 
     MKUSER_OPTIONS=""
    ;|
+   # MARK: Manual (Re-)Enrolment
    ^_mbsetupuser)
     # We will need the login details of a Volume Owner (an account with a Secure Token) to proceed,
     # so we'll ask for it, and in this instance, no need to restart, once the login details are
@@ -734,12 +745,13 @@ case $1 in
     unset SECURE_ADMIN
    ;|
    *)
-    # Setup Startup after restart
+    # MARK: Setup Startup after restart
     trackNow "Add this script to startup process" \
      secure "defaults write '$STARTUP_PLIST' Label '$DEFAULTS_NAME' ; defaults write '$STARTUP_PLIST' RunAtLoad -bool TRUE ; defaults write '$STARTUP_PLIST' ProgramArguments -array '$C_ENROLMENT' ; chmod go+r '$STARTUP_PLIST'" "Creating '$STARTUP_PLIST'" \
      file "$STARTUP_PLIST" 'SF=autostartstop'
 
-    # unbind from Active Directory (if bound)
+    # MARK: Unbind Active Directory
+    #  (if bound)
     if [ "$( ls /Library/Preferences/OpenDirectory/Configurations/Active\ Directory | wc -l )" -gt 0 ]; then
      POLICY_UNBIND="$( defaultRead policyADUnbind )"
      if [ "$POLICY_UNBIND" = "" ]; then
@@ -753,7 +765,7 @@ case $1 in
       test '[ "$( ls /Library/Preferences/OpenDirectory/Configurations/Active\ Directory | wc -l )" -eq 0 ]' 'SF=person.2.slash'
     fi
 
-    # set computername
+    # MARK: Set the Computer Name
     INSTALL_POLICY="${"$( defaultRead policyComputerName )":-"fixComputerName"}"
     COMPUTER_NAME="$( scutil --get ComputerName )"
     trackNow "Setting computer name" \
@@ -761,17 +773,18 @@ case $1 in
      test '[ "$COMPUTER_NAME" != "$( scutil --get ComputerName )" ]' 'SF=lock.desktopcomputer'
     infoBox
     
-    # perform a recon
+    # MARK: Perform a recon
+    #  Helps with scoping install config profiles based on computer name.
     trackNow "Updating Inventory" \
      command "'$C_JAMF' recon" \
      date '' 'SF=list.bullet.rectangle'
 
-    # install mkuser
+    # MARK: Install mkuser
     trackNow "Installing mkuser" \
      install mkuser \
      file "$C_MKUSER" 'SF=person.3.sequence'
     
-    # Add complete setup
+    # MARK: Add our TEMP_ADMIN
     trackNow "$TEMP_NAME - Initial Setup account" \
      secure "'$C_MKUSER' --username '$TEMP_ADMIN' --password '$( readSaved temp )' --real-name '$TEMP_NAME' --home /Users/$TEMP_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --automatic-login --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes $MKUSER_OPTIONS" "Creating username $TEMP_ADMIN with mkuser" \
      file "/Users/$TEMP_ADMIN" 'SF=person.badge.plus'
@@ -787,19 +800,20 @@ case $1 in
     runIt "sudo -u '$TEMP_ADMIN' defaults write '/Users/$TEMP_ADMIN/Library/Preferences/com.jamfsoftware.selfserviceplus.plist' 'com.jamfsoftware.selfservice.onboardingcomplete' -bool TRUE"
     runIt "chown '$TEMP_ADMIN' /Users/$TEMP_ADMIN/Library/Preferences/com.jamfsoftware.selfservice*"
    ;|
+   
    _mbsetupuser)
-    # Restart, and record it as a task
+    # MARK: Restart
+    #  and record it as a task
     shutdown -r +1 &
     trackNow "Restarting for Application Installation" \
      none 'shutdown -r +1 &' \
      date '' 'SF=restart'
     sleep 5
     rm -rf "$LOGIN_PLIST" "$TRACKER_RUNNING"
-    # if we get a dialog going, keep it open for at least half the time?
-    # sleep 30
    ;;
    *)
-    # Escrow BootStrap Token - Track this?
+    # MARK: Escrow BootStrap Token
+    #  Track this?
     logIt "Escrowing BootStrap Token - required for manual enrolments and re-enrolments."
     EXPECT_SCRIPT="expect -c \""
     EXPECT_SCRIPT+="spawn profiles install -type bootstraptoken ;"
@@ -810,7 +824,7 @@ case $1 in
     EXPECT_SCRIPT+=" expect \\\"profiles: Bootstrap Token escrowed\\\"\""
     eval "$EXPECT_SCRIPT" >> "$LOG_FILE" 2>&1
 
-    # trigger processing
+    # MARK: Trigger processing
     runIt "'$C_ENROLMENT' process >> /dev/null 2>&1"
    ;;
   esac
