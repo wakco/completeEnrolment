@@ -164,7 +164,9 @@ mailSend() {
 
 infoBox() {
  INFOBOX="**macOS $( sw_vers -productversion )** on  <br>$( scutil --get ComputerName )  <br><br>"
- INFOBOX+="**Started:**  <br>$( jq startdate )  <br><br>"
+ if [ "$( jq 'startdate' )" != "" ]; then
+  INFOBOX+="**Started:**  <br>$( jq startdate )  <br><br>"
+ fi
  if [ "$START_TIME" != "" ]; then
   INFOBOX+="**Last Restarted:**  <br>$( date -jr "$START_TIME" "+%d/%m/%Y %H:%M %Z" )  <br><br>"
  fi
@@ -175,8 +177,10 @@ infoBox() {
   INFOBOX+="**Finished at:**  <br>$( date -jr "$FINISHED" "+%d/%m/%Y %H:%M %Z" )  <br><br>"
  fi
  INFOBOX+="**Total Tasks:** $( plutil -extract listitem raw -o - "$TRACKER_JSON" )  <br><br>"
- INFOBOX+="**Last Task:** $( jq 'currentitem' )  <br>$( jq 'listitem[.currentitem].title' )  <br><br>"
-  if [ "$COUNT" != "" ]; then
+ if [ "$1" != "done" ]; then
+  INFOBOX+="**Current Task:** $( jq 'currentitem' )  <br>$( jq 'listitem[.currentitem].title' )  <br><br>"
+ fi
+ if [ "$COUNT" != "" ]; then
   INFOBOX+="**Attempt:** $COUNT  <br><br>"
  fi
  if [ "$( jq 'installCount' )" != "" ]; then
@@ -382,7 +386,8 @@ trackIt() {
 repeatIt() {
  COUNT=1
  until [ $COUNT -gt $PER_APP ] || trackIt "$1" "$2" "$3" "$4"; do
-  sleep 5
+  infoBox
+  sleep 2
   ((COUNT++))
  done
  if [ $COUNT -gt $PER_APP ]; then
@@ -406,6 +411,7 @@ trackNew() {
  else
   track new "$1"
  fi
+ infoBox
 }
 
 # title, command type (command/policy/label), (shell command, jamf policy trigger, or Installomator
@@ -441,6 +447,7 @@ trackNow() {
    ;;
   esac
   THE_RESULT=$?
+  infoBox
   # Process error here?
   return $THE_RESULT
  fi
@@ -562,16 +569,16 @@ case $1 in
   trackNow "Setting Time Zone" \
    command "/usr/sbin/systemsetup -settimezone '$TIME_ZONE'" \
    result '' 'SF=clock.badge.exclamationmark'
-  sleep 5
+  sleep 2
   SYSTEM_TIME_SERVER="${"$( defaultRead systemTimeServer )":-"$( systemsetup -getnetworktimeserver | awk "{print \$NF}" )"}"
   trackNow "Setting Network Time Sync server" \
    command "/usr/sbin/systemsetup -setnetworktimeserver '$SYSTEM_TIME_SERVER'" \
    result '' 'SF=clock.badge.questionmark'
-  sleep 5
+  sleep 2
   trackNow "Synchronising the Time" \
    command "/usr/bin/sntp -Ss '$SYSTEM_TIME_SERVER'" \
    result '' 'SF=clock'
-  sleep 5
+  sleep 2
   
   # Load infoBox
   track string starttime "$( date "+%s" )"
@@ -583,7 +590,7 @@ case $1 in
    trackNow "Installing Rosetta for Apple Silicon Mac Intel compatibility" \
     command "/usr/sbin/softwareupdate --install-rosetta --agree-to-license" \
     file "/Library/Apple/usr/libexec/oah/libRosettaRuntime" 'SF=rosette'
-   sleep 5
+   sleep 2
   fi
   
   # Install initial file
@@ -591,7 +598,6 @@ case $1 in
   trackNow "Installing Initial Files" \
    policy "$INSTALL_POLICY" \
    file "$DIALOG_ICON" 'SF=square.and.arrow.down.on.square'
-  infoBox
 
   # Install Installomator
   # This can be either the custom version from this repository, or the script that installs the
@@ -600,7 +606,6 @@ case $1 in
   trackNow "Installing Installomator" \
    policy "$INSTALL_POLICY" \
    file "/usr/local/Installomator/Installomator.sh" 'SF=square.and.arrow.down.badge.checkmark'
-  infoBox
   
   # Install swiftDialog
   trackNow "Installing swiftDialog (the software generating this window)" \
@@ -628,7 +633,7 @@ case $1 in
         
     # Restart the login window
     runIt "/usr/bin/defaults write /Library/Preferences/com.apple.loginwindow.plist LoginwindowText 'Enrolled at $( /usr/bin/profiles status -type enrollment | /usr/bin/grep server | /usr/bin/awk -F '[:/]' '{ print $5 }' )\nplease wait while initial configuration in performed...\nThis computer will restart shortly.'"
-    sleep 5
+    sleep 2
     
     # only kill the login window if it is already running
     if [ "$( pgrep -lu "root" "loginwindow" )" != "" ]; then
@@ -794,7 +799,7 @@ case $1 in
     # sleep 30
    ;;
    *)
-    # Escrow BootStrap Token
+    # Escrow BootStrap Token - Track this?
     logIt "Escrowing BootStrap Token - required for manual enrolments and re-enrolments."
     EXPECT_SCRIPT="expect -c \""
     EXPECT_SCRIPT+="spawn profiles install -type bootstraptoken ;"
@@ -876,25 +881,28 @@ case $1 in
    WHO_LOGGED="$( who | grep -m1 console | cut -d " " -f 1 )"
   fi
   
-  sleep 5
+  sleep 2
   
-  # now is a good time to start Self Service
-  launchctl asuser $( id -u $WHO_LOGGED ) osascript -e "tell application \"Finder\" to open POSIX file \"$SELF_SERVICE\""
-  sleep 5
-
   # and close Finder & Dock if we just started up (i.e. if WHO_LOGGED = TEMP_ADMIN)
   if [ "$WHO_LOGGED" = "$TEMP_ADMIN" ]; then
    track update status success
    launchctl bootout gui/$( id -u $WHO_LOGGED )/com.apple.Dock.agent
    launchctl bootout gui/$( id -u $WHO_LOGGED )/com.apple.Finder
-   sleep 5
+   sleep 2
   fi
   
   # Start Tracker dialog
-  if [ "$( pgrep -lu "root" "Dialog" )" = "" ]; then
+  if [ "$( pgrep "Dialog" )" = "" ]; then
    runIt "'$C_ENROLMENT' startDialog >> /dev/null 2>&1 &"
   fi
-  sleep 5
+  sleep 2
+  
+    # now is a good time to start Self Service
+  trackNow "Opening $( echo "$SELF_SERVICE" | sed -E 's=.*/(.*)\.app$=\1=' )" \
+   secure "launchctl asuser $( id -u $WHO_LOGGED ) osascript -e 'tell application \"Finder\" to open POSIX file \"$SELF_SERVICE\"'" "$( echo "$SELF_SERVICE" | sed -E 's=.*/(.*)\.app$=\1=' ) may be required for some installs" \
+   result '' 'SF=square.and.arrow.down.badge.checkmark'
+  sleep 2
+
   
   if [ "$( jq 'listitem[.currentitem+1].status' )" != "success" ]; then
     
@@ -1122,7 +1130,8 @@ case $1 in
     track update subtitle "Updates inventory once every $PER_APP minutes"
     track update successtype "stamp"
    fi
-   
+   infoBox
+
    sleep 1
    
    plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loaded" "$TRACKER_JSON"
@@ -1147,6 +1156,7 @@ case $1 in
     SUCCESS_COUNT=0
     until [ $( jq 'currentitem' ) -ge $( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" ) ]; do
      logIt "Running Task $( jq 'currentitem' ), SUCCESS_COUNT = $SUCCESS_COUNT"
+     infoBox
      if [ "$SUCCESS_COUNT" -eq $( jq 'installCount' ) ]; then
       track update status success
      elif [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
@@ -1219,8 +1229,8 @@ case $1 in
    ((FULLSUCCESS_COUNT++))
    logIt "Success: $FULLSUCCESS_COUNT, Installs: $SUCCESS_COUNT, Failed: $FAILED_COUNT"
   fi
-  infoBox
   
+  # MARK: send email
   # Time to send email to notify staff to sort out the next step (if necessary).
   trackNew "Emailing Installation Status"
   if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
@@ -1237,7 +1247,7 @@ case $1 in
    # swift dialog has issues with :'s and ,'s in the command file
    track update subtitle "$EMAIL_SUBJECT"
    EMAIL_SUBJECT="OSDNotification: $EMAIL_SUBJECT"
-   EMAIL_BODY="$( system_profiler SPHardwareDataType | sed -E 's=^( *)(.*):(.*)$=<b>\2:</b>\3=' )\n"
+   EMAIL_BODY="$( system_profiler SPHardwareDataType | sed -E 's=^( *)(.*):(.*)$=<b>\2:</b>\3\n=' )\n"
    NETWORK_INTERFACE="$( route get "$JAMF_SERVER" | grep interface | awk '{ print $NF }' )"
    EMAIL_BODY+="\n<b>MAC Address in use:</b> $( ifconfig "$NETWORK_INTERFACE" | grep ether | awk '{ print $NF }' )\n"
    EMAIL_BODY+="<b>IP Address in use:</b> $( ifconfig "$NETWORK_INTERFACE" | grep "inet " | awk '{ print $2 }' )\n"
@@ -1260,10 +1270,10 @@ case $1 in
    track integer currentitem 0
    EMAIL_BODY+="<table><tr><td><b>Title</b></td><td><b>Final&nbsp;Status</b></td></tr>\n"
    EMAIL_BODY+="<tr><td><b>Command&nbsp;or&nbsp;Install&nbsp;Type</b></td><td><b>Reason</b></td></tr>\n"
-   EMAIL_BODY+="<table><tr><td>=======================</td><td>============</td></tr><\n"
+   EMAIL_BODY+="<tr><td>=======================</td><td>============</td></tr>\n"
    until [ $( jq 'currentitem' ) -ge $(($( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" )-1)) ]; do
-    EMAIL_BODY+="<tr><td><b>$( jq 'listitem[.currentitem].title' )</b></td><td><b>Final Status: $( jq 'listitem[.currentitem].status' )</b></td></tr>\n"
-    EMAIL_BODY+="<tr><td>$( jq 'listitem[.currentitem].subtitle' )</td><td>$( jq 'listitem[.currentitem].statustext' )</td></tr>\n"
+    EMAIL_BODY+="<tr><td><b>$( jq 'listitem[.currentitem].title' | sed -E 's= =\&nbsp;=g' )</b></td><td><b>$( jq 'listitem[.currentitem].status' | sed -E 's= =\&nbsp;=g' )</b></td></tr>\n"
+    EMAIL_BODY+="<tr><td>$( jq 'listitem[.currentitem].subtitle' | sed -E 's= =\&nbsp;=g' )</td><td>$( jq 'listitem[.currentitem].statustext' | sed -E 's= =\&nbsp;=g' )</td></tr>\n"
     track integer currentitem $(($( jq 'currentitem' )+1))
    done
    EMAIL_BODY+="</table>"
@@ -1359,8 +1369,7 @@ case $1 in
    date '' 'SF=list.bullet.rectangle'
   
   # Wait for user
-#  plutil -replace button2text "Finish" "$TRACKER_JSON"
-#  plutil -replace button2text "Finish" "$LOG_JSON"
+  infoBox done
   echo "button1text: Finish" >> "$TRACKER_COMMAND"
   sleep 0.1
   echo "end:" >> "$TRACKER_COMMAND"
