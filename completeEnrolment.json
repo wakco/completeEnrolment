@@ -201,7 +201,7 @@
   },
   "perAPP": {
    "title": "Time out for Installation Status dialog",
-   "description": "When monitoring the installation status of applications, obviously the dialog should not wait forever, therefore the script will calculate a timeout based on this number of minutes per tast to monitor. i.e 5 minutes per task for 5 tasks will mean the Installation Status dialog will timeout after 25 minutes. This will also set the wait time the dialog will wait for someone to click done (after all apps are installed), and the number of failures required before switching to the backup install method (if configured for an install task). Requires the installs list to be included. Default is 5 Minutes.",
+   "description": "When monitoring the installation status of applications, obviously the dialog should not wait forever, therefore the script will calculate a timeout based on this number of minutes per task to monitor. i.e 5 minutes per task for 5 tasks will mean the Installation Status dialog will timeout after about 25 minutes. This will also set the number of test failures required before switching to a configured backup install method (if configured for an install task). Requires the installs list to be included. Default is 5 Minutes.",
    "type": "integer",
    "enum": [
     2,

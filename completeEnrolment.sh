@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.0l"
+VERSION="1.0o"
 
 # Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -166,7 +166,7 @@ infoBox() {
  INFOBOX="**macOS $( sw_vers -productversion )** on  <br>$( scutil --get ComputerName )  <br><br>"
  INFOBOX+="**Started:**  <br>$( jq startdate )  <br><br>"
  if [ "$START_TIME" != "" ]; then
-  INFOBOX+="**Restarted:**  <br>$( date -jr "$START_TIME" "+%d/%m/%Y %H:%M %Z" )  <br><br>"
+  INFOBOX+="**Last Restarted:**  <br>$( date -jr "$START_TIME" "+%d/%m/%Y %H:%M %Z" )  <br><br>"
  fi
  if [ "$FINISH_TIME" != "" ]; then
   INFOBOX+="**Estimated Finish:**  <br>$( date -jr "$FINISH_TIME" "+%d/%m/%Y %H:%M %Z" )  <br><br>"
@@ -174,13 +174,18 @@ infoBox() {
  if [ "$FINISHED" != "" ]; then
   INFOBOX+="**Finished at:**  <br>$( date -jr "$FINISHED" "+%d/%m/%Y %H:%M %Z" )  <br><br>"
  fi
+ INFOBOX+="**Total Tasks:** $( plutil -extract listitem raw -o - "$TRACKER_JSON" )  <br><br>"
+ INFOBOX+="**Last Task:** $( jq 'currentitem' )  <br>$( jq 'listitem[.currentitem].title' )  <br><br>"
+  if [ "$COUNT" != "" ]; then
+  INFOBOX+="**Attempt:** $COUNT  <br><br>"
+ fi
  if [ "$( jq 'installCount' )" != "" ]; then
-  INFOBOX+="**Apps to Install:** $( jq 'installCount' )  <br><br>"
+  INFOBOX+="**Install Tasks:** $( jq 'installCount' )  <br><br>"
  fi
  if [ "$SUCCESS_COUNT" != "" ]; then
   INFOBOX+="**Installed:** $SUCCESS_COUNT  <br><br>"
  fi
-  if [ "$FAILED_COUNT" != "" ]; then
+  if [ "$FAILED_COUNT" != "" ] && [ $FAILED_COUNT -gt 0 ]; then
   INFOBOX+="**Failed:** $FAILED_COUNT  <br><br>"
  fi
  if [ "$FULLSUCCESS_COUNT" != "" ]; then
@@ -287,7 +292,7 @@ trackIt() {
     track update statustext "Waiting for Mac App Store to install..."
    ;|
    selfservice)
-    if [ "$( jq 'listitem[.currentitem].lastattempt' )" = "" ] || [ $( date "+%s" ) -ge $(($( jq 'listitem[.currentitem].lastattempt' )+$PER_APP*120)) ]; then
+    if [ "$( jq 'listitem[.currentitem].lastattempt' )" = "" ] || [ $( date "+%s" ) -ge $(($( jq 'listitem[.currentitem].lastattempt' )+$PER_APP*$PER_APP*30)) ]; then
      track update statustext "Asking Self Service to execute..."
      runIt "launchctl asuser $( id -u $WHO_LOGGED ) open -j -g -a '$SELF_SERVICE' -u '$2'"
      track update lastattempt "$( date "+%s" )"
@@ -325,16 +330,18 @@ trackIt() {
    if CHECKAPP="$( spctl -a -vv "$4" 2>&1 )"; then
     THE_TEST=true
     case $CHECKAPP in
-     *"($5)"*)
-      RESPONSE="Installed and Verified (Team ID $5)"
-     ;;
      *'Mac App Store'*)
       RESPONSE="Installed via Mac App Store"
+     ;;
+     *"($5)"*)
+      RESPONSE="Installed and Verified (Team ID $5)"
      ;;
      *)
       RESPONSE="Installed, but Team ID ($5) didn't match (ID $( echo "$CHECKAPP" | awk '/origin=/ { print $NF }' | tr -d '()' ))"
      ;;
     esac
+   else
+    ERR_RESPONSE="App $( echo "$4" | sed -E 's=.*/(.*)\.app$=\1=' ) Not Found..."
    fi
   ;|
   result)
@@ -343,7 +350,7 @@ trackIt() {
   file)
    THE_TEST="[ -e '$4' ]"
    RESPONSE="Found $4"
-   ERR_RESPONSE="$4 Not Found"
+   ERR_RESPONSE="$4 Not Found..."
   ;|
   test)
    THE_TEST="$4"
@@ -543,7 +550,7 @@ case $1 in
   track string commandfile "$TRACKER_COMMAND"
   track string position "bottom"
   track string height "90%"
-  track string width "80%"
+  track string width "90%"
   track bool blurscreen true
   ditto "$TRACKER_JSON" "$LOG_JSON"
   plutil -insert listitem -array "$TRACKER_JSON"
@@ -1172,7 +1179,7 @@ case $1 in
      else
       ((SUCCESS_COUNT++))
       infoBox
-      sleep 5
+      sleep 2
      fi
      track integer currentitem $(($( jq 'currentitem' )+1))
     done
@@ -1230,32 +1237,37 @@ case $1 in
    # swift dialog has issues with :'s and ,'s in the command file
    track update subtitle "$EMAIL_SUBJECT"
    EMAIL_SUBJECT="OSDNotification: $EMAIL_SUBJECT"
-   EMAIL_BODY="$( system_profiler SPHardwareDataType )\n"
+   EMAIL_BODY="$( system_profiler SPHardwareDataType | sed -E 's=^( *)(.*):(.*)$=<b>\2:</b>\3=' )\n"
    NETWORK_INTERFACE="$( route get "$JAMF_SERVER" | grep interface | awk '{ print $NF }' )"
-   EMAIL_BODY+="      MAC Address in use: $( ifconfig "$NETWORK_INTERFACE" | grep ether | awk '{ print $NF }' )\n"
-   EMAIL_BODY+="      IP Address in use: $( ifconfig "$NETWORK_INTERFACE" | grep "inet " | awk '{ print $2 }' )\n"
-   EMAIL_BODY+="      On Network Interface: $( networksetup -listnetworkserviceorder | grep -B1 "$NETWORK_INTERFACE" )\n\n"
-   EMAIL_BODY+="Script: $0\n"
-   EMAIL_BODY+="Enrollment Started: $( jq startdate )\n"
-   EMAIL_BODY+="Last Restart:  $( date -jr "$START_TIME" "+%d/%m/%Y %H:%M %Z" )\n"
-   EMAIL_BODY+="Estimated Finish:  $( date -jr "$FINISH_TIME" "+%d/%m/%Y %H:%M %Z" )\n"
-   EMAIL_BODY+="Finished at: $( date -jr "$FINISHED" "+%d/%m/%Y %H:%M %Z" )\n"
-   EMAIL_BODY+="Apps to Install: $( jq 'installCount' )\n"
-   EMAIL_BODY+="Installed: $SUCCESS_COUNT\n"
-   EMAIL_BODY+="Failed: $FAILED_COUNT\n"
-   EMAIL_BODY+="Completed Tasks: $FULLSUCCESS_COUNT\n"
-   EMAIL_BODY+="\nThe initial log is available at "
-   EMAIL_BODY+="<a href= \"${JAMF_URL}computers.html?id=$( defaultRead jssID )&o=r&v=history\">${JAMF_URL}computers.html?id=$( defaultRead jssID )&o=r&v=history</a>,\n"
+   EMAIL_BODY+="\n<b>MAC Address in use:</b> $( ifconfig "$NETWORK_INTERFACE" | grep ether | awk '{ print $NF }' )\n"
+   EMAIL_BODY+="<b>IP Address in use:</b> $( ifconfig "$NETWORK_INTERFACE" | grep "inet " | awk '{ print $2 }' )\n"
+   EMAIL_BODY+="<b>On Network Interface:</b> $NETWORK_INTERFACE\n$( networksetup -listnetworkserviceorder | grep -B1 "$NETWORK_INTERFACE" )\n\n"
+   EMAIL_BODY+="<b>Script:</b> $0\n"
+   EMAIL_BODY+="<b>Enrollment Started:</b> $( jq startdate )\n"
+   EMAIL_BODY+="<b>Last Restart:</b>  $( date -jr "$START_TIME" "+%d/%m/%Y %H:%M %Z" )\n"
+   EMAIL_BODY+="<b>Estimated Finish:</b>  $( date -jr "$FINISH_TIME" "+%d/%m/%Y %H:%M %Z" )\n"
+   EMAIL_BODY+="<b>Finished at:</b> $( date -jr "$FINISHED" "+%d/%m/%Y %H:%M %Z" )\n"
+   EMAIL_BODY+="<b>Total Tasks:</b> $( plutil -extract listitem raw -o - "$TRACK_JSON" )\n"
+   EMAIL_BODY+="<b>Apps to Install:</b> $( jq 'installCount' )\n"
+   EMAIL_BODY+="<b>Installed:</b> $SUCCESS_COUNT\n"
+   EMAIL_BODY+="<b>Failed:</b> $FAILED_COUNT\n"
+   EMAIL_BODY+="<b>Completed Tasks:</b> $FULLSUCCESS_COUNT\n"
+   EMAIL_BODY+="\nThe initial log is available at: "
+   EMAIL_BODY+="<a href=\"${JAMF_URL}computers.html?id=$( defaultRead jssID )&o=r&v=history\">${JAMF_URL}computers.html?id=$( defaultRead jssID )&o=r&v=history</a>,\n"
    EMAIL_BODY+="with full logs available in the /Library/Logs folder on the computer.\n"
    EMAIL_BODY+="Please review the logs and contact ${"$( defaultRead serviceName )":-"Service Management"} if any assistance is required.\n\n\n"
 
    track integer currentitem 0
+   EMAIL_BODY+="<table><tr><td><b>Title</b></td><td><b>Final&nbsp;Status</b></td></tr>\n"
+   EMAIL_BODY+="<tr><td><b>Command&nbsp;or&nbsp;Install&nbsp;Type</b></td><td><b>Reason</b></td></tr>\n"
+   EMAIL_BODY+="<table><tr><td>=======================</td><td>============</td></tr><\n"
    until [ $( jq 'currentitem' ) -ge $(($( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" )-1)) ]; do
-    EMAIL_BODY+="<b>Task: $( jq 'listitem[.currentitem].title' ) --- Final Status: $( jq 'listitem[.currentitem].status' )</b>\n"
-    EMAIL_BODY+="----- $( jq 'listitem[.currentitem].subtitle' ) --- $( jq 'listitem[.currentitem].statustext' )\n"
+    EMAIL_BODY+="<tr><td><b>$( jq 'listitem[.currentitem].title' )</b></td><td><b>Final Status: $( jq 'listitem[.currentitem].status' )</b></td></tr>\n"
+    EMAIL_BODY+="<tr><td>$( jq 'listitem[.currentitem].subtitle' )</td><td>$( jq 'listitem[.currentitem].statustext' )</td></tr>\n"
     track integer currentitem $(($( jq 'currentitem' )+1))
    done
- #  track integer currentitem $(($( jq 'currentitem' )-1))
+   EMAIL_BODY+="</table>"
+   
    trackupdate statustext "Identifying where to email..."
    EMAIL_FROM="${"$( defaultRead emailFrom )":-""}"
    EMAIL_TO="${"$( defaultRead emailTo )":-""}"
