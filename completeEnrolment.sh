@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.0o"
+VERSION="1.0p"
 
 # Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -276,7 +276,7 @@ trackIt() {
     fi
    ;|
    secure)
-    runIt "$2" "$( echo "$2" | awk -F '(p|P)assword' '{ print $1 }' )... (hidden)"
+    runIt "$2" "$( echo "$2" | awk -F '(p|P)assword' '{ print $1 }' )... (remainder not logged)"
    ;;
    command)
     runIt "$2"
@@ -286,14 +286,14 @@ trackIt() {
     runIt "$C_JAMF policy -event $2"
    ;;
    install)
-    track update statustext "Attempt$( if [ "$THE_COUNT" = "" ]; then echo "ing" ; else echo "$THE_COUNT at" ; fi ) the install..."
-    runIt "$C_INSTALL $2 NOTIFY=silent $GITHUBAPI"
+    track update statustext "Install attempt$( if [ "$THE_COUNT" = "" ]; then echo " running" ; else echo "$THE_COUNT" ; fi )..."
+    runIt "$C_INSTALL $2 INSTALL=force NOTIFY=silent $GITHUBAPI"
    ;;
    jac)
-    track update statustext "Waiting for Jamf App Installer to install..."
+    track update statustext "Waiting for 'Jamf App Installer' to install..."
    ;|
    mas)
-    track update statustext "Waiting for Mac App Store to install..."
+    track update statustext "Waiting for 'Mac App Store' to install..."
    ;|
    selfservice)
     if [ "$( jq 'listitem[.currentitem].lastattempt' )" = "" ] || [ $( date "+%s" ) -ge $(($( jq 'listitem[.currentitem].lastattempt' )+$PER_APP*$PER_APP*30)) ]; then
@@ -301,7 +301,7 @@ trackIt() {
      runIt "launchctl asuser $( id -u $WHO_LOGGED ) open -j -g -a '$SELF_SERVICE' -u '$2'"
      track update lastattempt "$( date "+%s" )"
     else
-     track update statustext "Waiting for Self Service to execute..."
+     track update statustext "Waiting for 'Self Service' to execute..."
     fi
    ;|
    *)
@@ -335,7 +335,7 @@ trackIt() {
     THE_TEST=true
     case $CHECKAPP in
      *'Mac App Store'*)
-      RESPONSE="Installed via Mac App Store"
+      RESPONSE="Installed via 'Mac App Store'"
      ;;
      *"($5)"*)
       RESPONSE="Installed and Verified (Team ID $5)"
@@ -345,7 +345,7 @@ trackIt() {
      ;;
     esac
    else
-    ERR_RESPONSE="App $( echo "$4" | sed -E 's=.*/(.*)\.app$=\1=' ) Not Found..."
+    ERR_RESPONSE="app '$( echo "$4" | sed -E 's=.*/(.*)\.app$=\1=' )' Not Found..."
    fi
   ;|
   result)
@@ -823,6 +823,7 @@ case $1 in
    exit 0
   fi
  ;;
+ # MARK: Start swiftDialog
  startDialog)
   # to open the event tracking dialog
   TRACKER=true
@@ -831,19 +832,17 @@ case $1 in
    if $TRACKER; then
     touch "$TRACKER_RUNNING"
     logIt "Starting Progress Dialog..."
-#    runIt "'$C_DIALOG' --loginwindow --jsonfile '$TRACKER_JSON'"
     runIt "'$C_DIALOG' --jsonfile '$TRACKER_JSON' --button1text 'Show Log...'"
     rm -f "$TRACKER_RUNNING"
     TRACKER=false
    else
     logIt "Starting Log view Dialog..."
-#    runIt "'$C_DIALOG' --loginwindow --jsonfile '$LOG_JSON'"
     runIt "'$C_DIALOG' --jsonfile '$LOG_JSON' --button1text 'Show Tasks...'"
     TRACKER=true
    fi
-   
   done
  ;;
+ # MARK: Load saved settings
  *)
   # load saved settings
   if [ "$( settingsPlist read github )" = "" ]; then
@@ -852,6 +851,7 @@ case $1 in
    GITHUBAPI=" GITHUBAPI=$( readSaved github )"
   fi
  ;|
+ # MARK: Process Installs
  process)
   # clear the LoginwindowText
   runIt "/usr/bin/defaults delete /Library/Preferences/com.apple.loginwindow.plist LoginwindowText"
@@ -862,18 +862,20 @@ case $1 in
   START_TIME=$( date "+%s" )
   infoBox
   
-  # in case of restart in the middle
+  # MARK: Track Restart
+  #  in case of restart in the middle
   if [ "$( jq 'processStart' )" = "" ]; then
    track integer processStart $( jq 'currentitem' )
   else
    track integer currentitem $( jq 'processStart' )
   fi
 
-  # wait for Finder
+  # MARK: Wait for Finder
   while [ "$( pgrep "Finder" )" = "" ]; do
    sleep 1
   done
   
+  # MARK: Whose logged in?
   # reset WHO_LOGGED as starting before the Finder may have collecting the wrong information
   if [ "$( who | grep console | wc -l )" -gt 1 ]; then
    WHO_LOGGED="$( who | grep -v mbsetupuser | grep -m1 console | cut -d " " -f 1 )"
@@ -883,7 +885,8 @@ case $1 in
   
   sleep 2
   
-  # and close Finder & Dock if we just started up (i.e. if WHO_LOGGED = TEMP_ADMIN)
+  # MARK: Close Finder & Dock
+  #  if we just started up (i.e. if WHO_LOGGED = TEMP_ADMIN)
   if [ "$WHO_LOGGED" = "$TEMP_ADMIN" ]; then
    track update status success
    launchctl bootout gui/$( id -u $WHO_LOGGED )/com.apple.Dock.agent
@@ -891,19 +894,19 @@ case $1 in
    sleep 2
   fi
   
-  # Start Tracker dialog
+  # MARK: Start Tracker dialog
   if [ "$( pgrep "Dialog" )" = "" ]; then
    runIt "'$C_ENROLMENT' startDialog >> /dev/null 2>&1 &"
   fi
   sleep 2
   
-    # now is a good time to start Self Service
+  # MARK: Start Self Service
   trackNow "Opening $( echo "$SELF_SERVICE" | sed -E 's=.*/(.*)\.app$=\1=' )" \
    secure "launchctl asuser $( id -u $WHO_LOGGED ) osascript -e 'tell application \"Finder\" to open POSIX file \"$SELF_SERVICE\"'" "$( echo "$SELF_SERVICE" | sed -E 's=.*/(.*)\.app$=\1=' ) may be required for some installs" \
    result '' 'SF=square.and.arrow.down.badge.checkmark'
   sleep 2
 
-  
+  # MARK: Add/update JAMF ADMIN
   if [ "$( jq 'listitem[.currentitem+1].status' )" != "success" ]; then
     
    # skip this if the computer has been restarted...
@@ -953,7 +956,7 @@ case $1 in
    file "/private/var/$JAMF_ADMIN" 'SF=person.badge.plus'
   track update jssname "$JAMF_ADMIN"
     
-  # Add or update LAPS ADMIN
+  # MARK: Add/update LAPS ADMIN
   if [ -e "/Users/$LAPS_ADMIN" ]; then
    trackNow "$LAPS_NAME - Local Administrator account" \
     secure "dscl . change '/Users/$LAPS_ADMIN' NFSHomeDirectory '/Users/$LAPS_ADMIN' '/private/var/$LAPS_ADMIN' ; mv '/Users/$LAPS_ADMIN' '/private/var/$LAPS_ADMIN' ; sysadminctl -secureTokenOn '"$LAPS_ADMIN"' -password '$( readSaved laps )' -adminUser '$TEMP_ADMIN' -adminPassword '$( readSaved temp )'" "Moving and securing $LAPS_ADMIN"\
@@ -965,9 +968,7 @@ case $1 in
     file "/private/var/$LAPS_ADMIN" 'SF=person.badge.plus'
   fi
   
-  # Allow for multiple install lists, to help provide better scoping of base and specific app
-  #  installs, with reduced replication, such that the base apps will not be required in all install
-  #  list variations.
+  # MARK: Prepare Installs
 
   trackNew "Task List"
   track update icon 'SF=checklist'
@@ -1040,6 +1041,7 @@ case $1 in
 
    infoBox
    
+   # MARK: Load Installs
    until [ $( jq 'installCount' ) -ge $( listRead 'installs' ) ]; do
     
     # Cheating by using TRACKER_START to update the Task List loading entry
@@ -1113,6 +1115,7 @@ case $1 in
    echo "listitem: index: $( jq 'trackitem' ), statustext: Inserting Pause & Inventory Update..." >> "$TRACKER_COMMAND"
    sleep 1
 
+   # MARK: Add Pause & Inventory
    trackNew "Pause for 30 seconds"
    if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
     track update icon 'SF=pause.circle'
@@ -1141,7 +1144,7 @@ case $1 in
    echo "listitem: index: $( jq 'trackitem' ), status: success" >> "$TRACKER_COMMAND"
    sleep 0.1
    
-   # process software installs
+   # MARK: Process software installs
    WAIT_TIME=$(($( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" )*$PER_APP*60))
    FINISH_TIME=$(($START_TIME+$WAIT_TIME))
    infoBox
@@ -1199,6 +1202,7 @@ case $1 in
    track integer currentitem $(($( jq 'currentitem' )-1))
   fi
 
+  # MARK: Checking status
   trackNew "Checking Status"
   if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
    track update icon 'SF=checklist'
@@ -1230,7 +1234,7 @@ case $1 in
    logIt "Success: $FULLSUCCESS_COUNT, Installs: $SUCCESS_COUNT, Failed: $FAILED_COUNT"
   fi
   
-  # MARK: send email
+  # MARK: Prepare email
   # Time to send email to notify staff to sort out the next step (if necessary).
   trackNew "Emailing Installation Status"
   if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
@@ -1247,7 +1251,7 @@ case $1 in
    # swift dialog has issues with :'s and ,'s in the command file
    track update subtitle "$EMAIL_SUBJECT"
    EMAIL_SUBJECT="OSDNotification: $EMAIL_SUBJECT"
-   EMAIL_BODY="$( system_profiler SPHardwareDataType | sed -E 's=^( *)(.*):(.*)$=<b>\2:</b>\3\n=' )\n"
+   EMAIL_BODY="$( system_profiler SPHardwareDataType | sed -E 's=^( *)(.*):(.*)$=<b>\2:</b>\3<br>=' )\n"
    NETWORK_INTERFACE="$( route get "$JAMF_SERVER" | grep interface | awk '{ print $NF }' )"
    EMAIL_BODY+="\n<b>MAC Address in use:</b> $( ifconfig "$NETWORK_INTERFACE" | grep ether | awk '{ print $NF }' )\n"
    EMAIL_BODY+="<b>IP Address in use:</b> $( ifconfig "$NETWORK_INTERFACE" | grep "inet " | awk '{ print $2 }' )\n"
@@ -1267,6 +1271,7 @@ case $1 in
    EMAIL_BODY+="with full logs available in the /Library/Logs folder on the computer.\n"
    EMAIL_BODY+="Please review the logs and contact ${"$( defaultRead serviceName )":-"Service Management"} if any assistance is required.\n\n\n"
 
+   # MARK: Build table
    track integer currentitem 0
    EMAIL_BODY+="<table><tr><td><b>Title</b></td><td><b>Final&nbsp;Status</b></td></tr>\n"
    EMAIL_BODY+="<tr><td><b>Command&nbsp;or&nbsp;Install&nbsp;Type</b></td><td><b>Reason</b></td></tr>\n"
@@ -1278,6 +1283,7 @@ case $1 in
    done
    EMAIL_BODY+="</table>"
    
+   # MARK: Final preparation of email
    trackupdate statustext "Identifying where to email..."
    EMAIL_FROM="${"$( defaultRead emailFrom )":-""}"
    EMAIL_TO="${"$( defaultRead emailTo )":-""}"
@@ -1337,6 +1343,7 @@ case $1 in
     fi
    fi
    
+   # MARK: Send email
    if [ "$MAIL_RESULT" -gt 0 ] || [ "$TO_RESULT" -gt 0 ] || [ "$ERR_RESULT" -gt 0 ] || [ "$BCC_RESULT" -gt 0 ]; then
     track update statustext "An email failed to send, see log"
     track update status fail
@@ -1346,7 +1353,8 @@ case $1 in
    fi
   fi
 
-  # disable automatic login if our TEMP_ADMIN is still configured
+  # MARK: Disable automatic login
+  #  if our TEMP_ADMIN is still configured
   if [ "$( defaults read /Library/Preferences/com.apple.loginwindow.plist autoLoginUser 2>/dev/null )" = "$TEMP_ADMIN" ]; then
    trackNow "Disable automatic login" \
     secure "defaults delete /Library/Preferences/com.apple.loginwindow.plist autoLoginUser ; rm -f /etc/kcpassword" "Removing $TEMP_ADMIN from automatic login" \
@@ -1358,28 +1366,31 @@ case $1 in
    fi
   fi
 
-  # connect identidy provider or bind to active directory
+  # MARK: Connect identidy provider
+  #  or bind to active directory
   trackNow "Attaching Identity Provider (or Active Directory binding)" \
    policy "${"$( defaultRead policyADBind )":-"adBind"}" \
    result '' 'SF=person.text.rectangle'
   
-  # one more recon
+  # MARK: One more recon
   trackNow "Last Inventory Update" \
    secure "'$C_JAMF' recon" "Updates inventory one last time" \
    date '' 'SF=list.bullet.rectangle'
   
-  # Wait for user
+  # MARK: Wait for user
   infoBox done
   echo "button1text: Finish" >> "$TRACKER_COMMAND"
   sleep 0.1
   echo "end:" >> "$TRACKER_COMMAND"
   
-  # wait for dialog to close
+  # MARK: Wait for dialog to close
+  #  So as not to let macOS close it unintentionally
   until [ "$( pgrep "Dialog" )" = "" ]; do
    sleep 1
   done
   
  ;;
+ # MARK: Clean up
  cleanUp)
   # A clean up routine
   if ${$( defaultReadBool tempKeep ):-false}; then
@@ -1390,6 +1401,7 @@ case $1 in
   logIt "Removing: $CLEANUP_FILES"
   eval "rm -rf $CLEANUP_FILES"
  ;;
+ # MARK: Default behaviour, clean up or process
  *)
   logIt "TEMP_ADMIN = $TEMP_ADMIN"
   logIt "WHO_LOGGED = $WHO_LOGGED"
