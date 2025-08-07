@@ -139,8 +139,13 @@
    "type": "string"
   },
   "policyADBind": {
-   "title": "Jamf policy for setting up your identity provider or binding to Active Directory",
-   "description": "Jamf policy name used to set up Platform SSO or bind the computer to Active Directory. Defaults to adBind. Also use this to create the user account or start Migration Assistant",
+   "title": "Jamf policy for perform the last step",
+   "description": "Jamf policy name used to set up Platform SSO, bind the computer to Active Directory, start Migration Assistant, create the assigned users account, etc. Defaults to adBind.",
+   "type": "string"
+  },
+  "policyADBindName": {
+   "title": "Display name for the last step",
+   "description": "As this is the last step, the name displayed in the task list goes here. Defaults to Perform Last Steps",
    "type": "string"
   },
   "manualContinue": {
@@ -211,6 +216,11 @@
     20
    ],
    "default": 5
+  },
+  "forceInstall": {
+   "title": "Force installation",
+   "description": "The Installomator script can force the installation of an app it is asked to install regardless of if the app is installed already or not, let alone up to date. Setting this to true will force the install, it will also stop testing if a task has already happened before running the task. Default is update if newer is available (false or unset), and test before each task, as well as after.",
+   "type": "boolean"
   },
   "emailSuccess": {
    "title": "Do we want success emails, or errors only",
