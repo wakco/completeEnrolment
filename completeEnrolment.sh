@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.0s"
+VERSION="1.0t"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -525,7 +525,7 @@ addAdmin() {
  OLD_HOME="$( dscl . read "/Users/$1" NFSHomeDirectory 2>/dev/null | cut -d ' ' -f 2- )"
  if [ "$OLD_HOME" = "" ]; then
   trackNow "$3 - $4 account" \
-   secure "'$C_MKUSER' --username $1 --password '$2' --real-name '$3' --home /private/var/$1 --hidden userOnly --skip-setup-assistant firstLoginOnly --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes $MKUSER_OPTIONS" "Creating username $1" \
+   secure "'$C_MKUSER' --username '$1' --password '$2' --real-name '$3' --home '/private/var/$1' --hidden userOnly --skip-setup-assistant firstLoginOnly --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes $MKUSER_OPTIONS" "Creating username $1" \
    file "/private/var/$1" 'SF=person.badge.plus'
  elif [ "$OLD_HOME" != "/private/var/$1" ]; then
   trackNow "$3 - $4 account" \
@@ -1026,7 +1026,7 @@ case $1 in
 #   file "/private/var/$JAMF_ADMIN" 'SF=person.badge.plus'
     
   # MARK: Add/update LAPS ADMIN
-  addAdmin "$LAPS_NAME" "$( readSaved laps )" "$LAPS_NAME" "Local Administrator" "$SECURE_ADMIN" "$SECURE_PASS"
+  addAdmin "$LAPS_ADMIN" "$( readSaved laps )" "$LAPS_NAME" "Local Administrator" "$SECURE_ADMIN" "$SECURE_PASS"
 #  OLD_LAPS_HOME="$( dscl . read "/Users/$LAPS_ADMIN" NFSHomeDirectory 2>/dev/null | cut -d ' ' -f 2- )"
 #  if [ "$OLD_LAPS_HOME" = "" ]; then
 #   trackNow "$LAPS_NAME - Local Administrator account" \
@@ -1096,7 +1096,7 @@ case $1 in
       sleep 0.1
       trackNew "$THE_TITLE"
       if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
-       track update subtitle "$( plutil -extract 'subtitle' raw -o - "$INSTALLS_JSON" )"
+       track update subtitle "$( plutil -extract 'subtitle' raw -o - "$LIST_FILE" )"
        track update icon 'SF=doc.text'
        track update status wait
        track update statustext "Loading $LIST_FILE..."
