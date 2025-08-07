@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.0r"
+VERSION="1.0s"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -512,8 +512,9 @@ trackNow() {
 addAdmin() {
  THE_ADMIN="$5"
  THE_PASS="$6"
+ MKUSER_OPTIONS="$7"
  if [ "$THE_ADMIN" != "" ]; then
-  MKUSER_OPTIONS="--secure-token-admin-account-name '$THE_ADMIN' --secure-token-admin-password '$THE_PASS'"
+  MKUSER_OPTIONS+=" --secure-token-admin-account-name '$THE_ADMIN' --secure-token-admin-password '$THE_PASS'"
  fi
  if [ "$WHO_LOGGED" = "$1" ]; then
   trackNow "Resetting password for account $4" \
@@ -832,7 +833,7 @@ case $1 in
      file "$C_MKUSER" 'SF=person.3.sequence'
     
     # MARK: Add our TEMP_ADMIN
-    addAdmin "$TEMP_ADMIN" "$( readSaved temp )" "$TEMP_NAME" "Initial Setup" "$SECURE_ADMIN" "$SECURE_PASS"
+    addAdmin "$TEMP_ADMIN" "$( readSaved temp )" "$TEMP_NAME" "Initial Setup" "$SECURE_ADMIN" "$SECURE_PASS" "--automatic-login"
 #    trackNow "$TEMP_NAME - Initial Setup account" \
 #     secure "'$C_MKUSER' --username '$TEMP_ADMIN' --password '$( readSaved temp )' --real-name '$TEMP_NAME' --home /Users/$TEMP_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --automatic-login --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes $MKUSER_OPTIONS" "Creating username $TEMP_ADMIN with mkuser" \
 #     file "/Users/$TEMP_ADMIN" 'SF=person.badge.plus'
