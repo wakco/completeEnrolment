@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.0w"
+VERSION="1.0x"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -60,10 +60,10 @@ setopt extended_glob
 if [ -e /usr/bin/jq ]; then
  # jq "alias"
  jq() {
-  /usr/bin/jq -Mr ".$1 // empty" "$TRACKER_JSON"
+  /usr/bin/jq -eMr ".$1 // empty" "$TRACKER_JSON"
  }
  readJSON() {
-  printf '%s' "$1" | /usr/bin/jq -r ".$2 // empty"
+  printf '%s' "$1" | /usr/bin/jq -eMr ".$2 // empty"
  }
 else
  # makeshift jq replacement
@@ -1047,7 +1047,7 @@ case $1 in
   unset SECURE_PASS
   
   # MARK: Skip install's? (for manual (re-)enrolment)
-  if [ "$( jq 'allowSkip' )" = "true" ]; then
+  if $( jq 'allowSkip' ); then
    trackNew "Install or Skip?"
    track update icon 'SF=questionmark'
    track update status pending
@@ -1064,7 +1064,7 @@ case $1 in
   if [ INSTALL_TASKS = 2 ]; then
    track update statustext "Skipped"
   else
-   if [ "$( jq 'allowSkip' )" = "true" ]; then
+   if $( jq 'allowSkip' ); then
     track update statustext "Continuing..."
    fi
    
