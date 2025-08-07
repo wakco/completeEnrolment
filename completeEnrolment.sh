@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.0t"
+VERSION="1.0u"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -204,7 +204,7 @@ infoBox() {
  fi
  INFOBOX+="**Total Tasks:** $( plutil -extract listitem raw -o - "$TRACKER_JSON" )  <br><br>"
  if [ "$1" != "done" ]; then
-  INFOBOX+="**Current Task:** $( jq 'currentitem' )  <br>$( jq 'listitem[.currentitem].title' )  <br><br>"
+  INFOBOX+="**Current Task:** $(($( jq 'currentitem' )+1))  <br>$( jq 'listitem[.currentitem].title' )  <br><br>"
  fi
  if [ "$COUNT" != "" ]; then
   INFOBOX+="**Attempt:** $COUNT  <br><br>"
