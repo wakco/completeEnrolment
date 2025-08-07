@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.0u"
+VERSION="1.0w"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -213,7 +213,10 @@ infoBox() {
   INFOBOX+="**Install Tasks:** $( jq 'installCount' )  <br><br>"
  fi
  if [ "$SUCCESS_COUNT" != "" ]; then
-  INFOBOX+="**Installed:** $SUCCESS_COUNT  <br><br>"
+  if [ "$INFO_SUCCESS_COUNT" = "" ] || [ $SUCCESS_COUNT -gt $INFO_SUCCESS_COUNT ]; then
+   INFO_SUCCESS_COUNT=$SUCCESS_COUNT
+  fi
+  INFOBOX+="**Installed:** $INFO_SUCCESS_COUNT  <br><br>"
  fi
   if [ "$FAILED_COUNT" != "" ] && [ $FAILED_COUNT -gt 0 ]; then
   INFOBOX+="**Failed:** $FAILED_COUNT  <br><br>"
@@ -346,7 +349,6 @@ testIt() {
 # command type (command/policy/label), (shell command, jamf policy trigger, or Installomator label),
 #  status confirmation type, file to check for (for status confirmation type: file), Team ID
 trackIt() {
- track update status wait
  local THE_COUNT=""
  if [ COUNT != "" ]; then
   THE_COUNT=" #$COUNT"
@@ -367,16 +369,17 @@ trackIt() {
    track update statustext "Paused"
   ;;
   *)
-   track update statustext "$THE_COUNT Running..."
-   sleep 1
    if ! $( defaultReadBool forceInstall ); then
     testIt 1 $3 $4 $5
     if [ $? -eq 0 ]; then
      return 0
     fi
    fi
+   track update statustext "$THE_COUNT Running..."
+   sleep 1
   ;;
  esac
+ track update status wait
  case $1 in
   command|secure)
    if [[ "$3" != (date|pause|stamp) ]]; then
@@ -1044,7 +1047,7 @@ case $1 in
   unset SECURE_PASS
   
   # MARK: Skip install's? (for manual (re-)enrolment)
-  if $( jq allowSkip ); then
+  if [ "$( jq 'allowSkip' )" = "true" ]; then
    trackNew "Install or Skip?"
    track update icon 'SF=questionmark'
    track update status pending
@@ -1061,7 +1064,7 @@ case $1 in
   if [ INSTALL_TASKS = 2 ]; then
    track update statustext "Skipped"
   else
-   if $( jq allowSkip ); then
+   if [ "$( jq 'allowSkip' )" = "true" ]; then
     track update statustext "Continuing..."
    fi
    
@@ -1348,7 +1351,7 @@ case $1 in
    track update subtitle "$EMAIL_SUBJECT"
    EMAIL_SUBJECT="OSDNotification: $EMAIL_SUBJECT"
    EMAIL_BODY="$( system_profiler SPHardwareDataType | sed -E 's=(Hardware|Overview):(.*)$=\1:<br>=' | sed -E 's=^( *)(.*):(.*)$=<b>\2:</b>\3=' )\n\n"
-   EMAIL_BODY+="<b>macOS Version:</b>\n$( sw_vers  | sed -E 's=^( *)(.*):(.*)$=<b>\2:</b>\3=' )\n\n"
+   EMAIL_BODY+="<b>macOS Version:</b><br>\n$( sw_vers  | sed -E 's=^( *)(.*):(.*)$=<b>\2:</b>\3=' )"
    NETWORK_INTERFACE="$( route get "$JAMF_SERVER" | grep interface | awk '{ print $NF }' )"
    EMAIL_BODY+="\n<b>MAC Address in use:</b> $( ifconfig "$NETWORK_INTERFACE" | grep ether | awk '{ print $NF }' )\n"
    EMAIL_BODY+="<b>IP Address in use:</b> $( ifconfig "$NETWORK_INTERFACE" | grep "inet " | awk '{ print $2 }' )\n"
@@ -1358,7 +1361,7 @@ case $1 in
    EMAIL_BODY+="<b>Last Restart:</b>  $( date -jr "$START_TIME" "+%d/%m/%Y %H:%M %Z" )\n"
    EMAIL_BODY+="<b>Estimated Finish:</b>  $( date -jr "$FINISH_TIME" "+%d/%m/%Y %H:%M %Z" )\n"
    EMAIL_BODY+="<b>Finished at:</b> $( date -jr "$FINISHED" "+%d/%m/%Y %H:%M %Z" )\n"
-   EMAIL_BODY+="<b>Total Tasks:</b> $( plutil -extract listitem raw -o - "$TRACK_JSON" )\n"
+   EMAIL_BODY+="<b>Total Tasks:</b> $( plutil -extract listitem raw -o - "$TRACKER_JSON" )\n"
    EMAIL_BODY+="<b>Apps to Install:</b> $( jq 'installCount' )\n"
    EMAIL_BODY+="<b>Installed:</b> $SUCCESS_COUNT\n"
    EMAIL_BODY+="<b>Failed:</b> $FAILED_COUNT\n"
@@ -1370,12 +1373,12 @@ case $1 in
 
    # MARK: Build table
    track integer currentitem 0
-   EMAIL_BODY+="<table><tr><td><b>Title</b></td><td><b>Final&nbsp;Status</b></td></tr>\n"
-   EMAIL_BODY+="<tr><td><b>Command&nbsp;or&nbsp;Install&nbsp;Type</b></td><td><b>Reason</b></td></tr>\n"
+   EMAIL_BODY+="<table><tr><td><b>Title</b></td><td><b>Final Status</b></td></tr>\n"
+   EMAIL_BODY+="<tr><td><b>Command or Install Type</b></td><td><b>Reason</b></td></tr>\n"
    EMAIL_BODY+="<tr><td>=======================</td><td>============</td></tr>\n"
    until [ $( jq 'currentitem' ) -ge $(($( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" )-1)) ]; do
-    EMAIL_BODY+="<tr><td><b>$( jq 'listitem[.currentitem].title' | sed -E 's= =\&nbsp;=g' )</b></td><td><b>$( jq 'listitem[.currentitem].status' | sed -E 's= =\&nbsp;=g' )</b></td></tr>\n"
-    EMAIL_BODY+="<tr><td>$( jq 'listitem[.currentitem].subtitle' | sed -E 's= =\&nbsp;=g' )</td><td>$( jq 'listitem[.currentitem].statustext' | sed -E 's= =\&nbsp;=g' )</td></tr>\n"
+    EMAIL_BODY+="<tr><td><b>$( jq 'listitem[.currentitem].title' )</b></td><td><b>$( jq 'listitem[.currentitem].status' )</b></td></tr>\n"
+    EMAIL_BODY+="<tr><td>$( jq 'listitem[.currentitem].subtitle' )</td><td>$( jq 'listitem[.currentitem].statustext' )</td></tr>\n"
     track integer currentitem $(($( jq 'currentitem' )+1))
    done
    EMAIL_BODY+="</table>"
@@ -1391,6 +1394,8 @@ case $1 in
    EMAIL_AUTH="${"$( defaultRead emailAUTH )":-"$EMAIL_FROM"}"
    logIt "Configured Email Details (if being sent):\nTo be sent via: $EMAIL_SMTP\nFrom: $EMAIL_FROM\nTo: $EMAIL_TO\nError: $EMAIL_ERR\nBCC: $EMAIL_BCC\nHidden by: $EMAIL_HIDDEN\nSubject: $EMAIL_SUBJECT\n\n$EMAIL_BODY\n"
 
+   EMAIL_BODY_ENCODED="$( echo "$EMAIL_BODY" | sed -E 's/ /\&nbsp;/g' | sed -E 's/=/\&#x3D;/g' )"
+   
    if [ "$EMAIL_AUTH" != "" ] && [ "$( readSaved email )" != "" ] && [[ "$EMAIL_SMTP" = *":"* ]]; then
     if [ "$EMAIL_FROM" != "" ] && [ "$EMAIL_SUBJECT" != "" ]; then
      logIt "From, and Subject is configured, attempting to send emails"
@@ -1413,7 +1418,7 @@ case $1 in
      if [[ "$AUTH_SMTP" = *"--mail-rcpt"* ]]; then
       logIt "Sending email"
       track update statustext "Sending email"
-      mailSend "$EMAIL_FROM" "$EMAIL_HIDDEN" "$EMAIL_SUBJECT" "$EMAIL_BODY"
+      mailSend "$EMAIL_FROM" "$EMAIL_HIDDEN" "$EMAIL_SUBJECT" "$EMAIL_BODY_ENCODED"
       MAIL_RESULT=$?
      fi
     fi
@@ -1422,19 +1427,19 @@ case $1 in
      logIt "From, and Subject is configured, attempting to send emails"
      if [ "$EMAIL_TO" != "" ]; then
       track update statustext "To address configured, sending email"
-      mailSend "$EMAIL_FROM" "$EMAIL_TO" "$EMAIL_SUBJECT" "$EMAIL_BODY" "$EMAIL_HIDDEN"
+      mailSend "$EMAIL_FROM" "$EMAIL_TO" "$EMAIL_SUBJECT" "$EMAIL_BODY_ENCODED" "$EMAIL_HIDDEN"
       TO_RESULT=$?
       sleep 5
      fi
      if [ "$EMAIL_ERR" != "" ] && [ "$FAILURE_COUNT" -gt 0 ]; then
       track update statustext "Error address configured, sending email"
-      mailSend "$EMAIL_FROM" "$EMAIL_ERR" "$EMAIL_SUBJECT" "$EMAIL_BODY" "$EMAIL_HIDDEN"
+      mailSend "$EMAIL_FROM" "$EMAIL_ERR" "$EMAIL_SUBJECT" "$EMAIL_BODY_ENCODED" "$EMAIL_HIDDEN"
       ERR_RESULT=$?
       sleep 5
      fi
      if [ "$EMAIL_BCC" != "" ]; then
       track update statustext "BCC address configured, sending email"
-      mailSend "$EMAIL_FROM" "$EMAIL_BCC" "$EMAIL_SUBJECT" "$EMAIL_BODY" "$EMAIL_HIDDEN"
+      mailSend "$EMAIL_FROM" "$EMAIL_BCC" "$EMAIL_SUBJECT" "$EMAIL_BODY_ENCODED" "$EMAIL_HIDDEN"
       BCC_RESULT=$?
      fi
     fi
