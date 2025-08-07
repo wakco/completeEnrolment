@@ -622,6 +622,7 @@ case $1 in
   ditto "$TRACKER_JSON" "$LOG_JSON"
   plutil -insert listitem -array "$TRACKER_JSON"
   track string liststyle "compact"
+  track bool allowSkip true
   plutil -replace displaylog -string "$LOG_FILE" "$LOG_JSON"
 
   # MARK: set time
@@ -716,7 +717,9 @@ case $1 in
     launchctl load -S LoginWindow "$LOGIN_PLIST"
     sleep 2
 
-    MKUSER_OPTIONS=""
+    # with a PreStage enrolment, there will be no Apps installed, so we won't allow skipping
+    track bool allowSkip false
+    
    ;|
    # MARK: Manual (Re-)Enrolment
    ^_mbsetupuser)
@@ -1041,21 +1044,26 @@ case $1 in
   unset SECURE_PASS
   
   # MARK: Skip install's? (for manual (re-)enrolment)
-  
-  trackNew "Install or Skip?"
-  track update icon 'SF=questionmark'
-  track update status pending
-  track update statustext "Asking..."
-  track update subtitle "Manual/re-enrolments can decide to skip installing Apps"
-  track update status wait
-  "$C_DIALOG" --icon "$DIALOG_ICON" --ontop --timer 30 --title none --mini \
-   --message "Install Applications?" --button1text "Continue" --button2text "Skip"
-  INSTALL_TASKS=$?
-  track update status success
+  if $( jq allowSkip ); then
+   trackNew "Install or Skip?"
+   track update icon 'SF=questionmark'
+   track update status pending
+   track update statustext "Asking..."
+   track update subtitle "Manual/re-enrolments can decide to skip installing Apps"
+   track update status wait
+   "$C_DIALOG" --icon "$DIALOG_ICON" --ontop --timer 30 --title none --mini \
+    --message "Install Applications?" --button1text "Continue" --button2text "Skip"
+   INSTALL_TASKS=$?
+   track update status success
+  else
+   INSTALL_TASKS=0
+  fi
   if [ INSTALL_TASKS = 2 ]; then
    track update statustext "Skipped"
   else
-   track update statustext "Continuing..."
+   if $( jq allowSkip ); then
+    track update statustext "Continuing..."
+   fi
    
    # MARK: Prepare Installs
 
