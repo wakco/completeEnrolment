@@ -415,7 +415,7 @@ trackIt() {
    track update statustext "Waiting for 'Mac App Store' to install..."
   ;|
   selfservice)
-   if [ "$( jq 'listitem[.currentitem].lastattempt' )" = "" ] || [ $( date "+%s" ) -ge $(($( jq 'listitem[.currentitem].lastattempt' )+$PER_APP*$PER_APP*30)) ]; then
+   if [ "$( jq 'listitem[.currentitem].lastattempt' )" = "" ] || [ $( date "+%s" ) -ge $(($( jq 'listitem[.currentitem].lastattempt' )+$PER_APP*$PER_APP*60)) ]; then
     track update statustext "Asking Self Service to execute..."
     runIt "launchctl asuser $( id -u $WHO_LOGGED ) open -j -g -a '$SELF_SERVICE' -u '$2'"
     track update lastattempt "$( date "+%s" )"
