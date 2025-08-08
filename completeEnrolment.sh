@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.0y"
+VERSION="1.0z"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -1351,11 +1351,11 @@ case $1 in
    track update subtitle "$EMAIL_SUBJECT"
    EMAIL_SUBJECT="OSDNotification: $EMAIL_SUBJECT"
    EMAIL_BODY="$( system_profiler SPHardwareDataType | sed -E 's=(Hardware|Overview):(.*)$=\1:<br>=' | sed -E 's=^( *)(.*):(.*)$=<b>\2:</b>\3=' )\n\n"
-   EMAIL_BODY+="<b>macOS Version:</b><br>\n$( sw_vers  | sed -E 's=^( *)(.*):(.*)$=<b>\2:</b>\3=' )"
    NETWORK_INTERFACE="$( route get "$JAMF_SERVER" | grep interface | awk '{ print $NF }' )"
    EMAIL_BODY+="\n<b>MAC Address in use:</b> $( ifconfig "$NETWORK_INTERFACE" | grep ether | awk '{ print $NF }' )\n"
    EMAIL_BODY+="<b>IP Address in use:</b> $( ifconfig "$NETWORK_INTERFACE" | grep "inet " | awk '{ print $2 }' )\n"
    EMAIL_BODY+="<b>On Network Interface:</b> $NETWORK_INTERFACE\n$( networksetup -listnetworkserviceorder | grep -B1 "$NETWORK_INTERFACE" )\n\n"
+   EMAIL_BODY+="<b>Software:</b><br>\n<b>macOS Version:</b><br>\n$( sw_vers  | sed -E 's=^( *)(.*):(.*)$=<b>\2:</b>\3=' )\n"
    EMAIL_BODY+="<b>Script:</b> $0\n"
    EMAIL_BODY+="<b>Enrollment Started:</b> $( jq startdate )\n"
    EMAIL_BODY+="<b>Last Restart:</b>  $( date -jr "$START_TIME" "+%d/%m/%Y %H:%M %Z" )\n"
