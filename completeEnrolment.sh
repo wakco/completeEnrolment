@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.0x"
+VERSION="1.0y"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -973,8 +973,8 @@ case $1 in
   
   # MARK: Start Self Service
   trackNow "Opening $( echo "$SELF_SERVICE" | sed -E 's=.*/(.*)\.app$=\1=' )" \
-   secure "launchctl asuser $( id -u $WHO_LOGGED ) osascript -e 'tell application \"Finder\" to open POSIX file \"$SELF_SERVICE\"'" "$( echo "$SELF_SERVICE" | sed -E 's=.*/(.*)\.app$=\1=' ) may be required for some installs" \
-   result '' 'SF=square.and.arrow.down.badge.checkmark'
+   secure "launchctl asuser $( id -u $WHO_LOGGED ) osascript -e 'tell application \"Finder\" to open POSIX file \"$SELF_SERVICE\"' ; sleep 5" "$( echo "$SELF_SERVICE" | sed -E 's=.*/(.*)\.app$=\1=' ) may be required for some installs" \
+   test "[ \"\$( pgrep 'Self Servic(e|e\+)\$' )\" != '' ]" 'SF=square.and.arrow.down.badge.checkmark'
   sleep 2
 
   # MARK: Add/update JAMF ADMIN
