@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.0z"
+VERSION="1.0"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
