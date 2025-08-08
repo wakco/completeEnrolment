@@ -528,7 +528,7 @@ addAdmin() {
  OLD_HOME="$( dscl . read "/Users/$1" NFSHomeDirectory 2>/dev/null | cut -d ' ' -f 2- )"
  if [ "$OLD_HOME" = "" ]; then
   trackNow "$3 - $4 account" \
-   secure "'$C_MKUSER' --username '$1' --password '$2' --real-name '$3' --home '/private/var/$1' --hidden userOnly --skip-setup-assistant firstLoginOnly --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes $MKUSER_OPTIONS" "Creating username $1" \
+   secure "'$C_MKUSER' --username '$1' --password '$2' --real-name '$3' --home '/private/var/$1' --hidden userOnly --skip-setup-assistant firstLoginOnly $ADMIN_ICON --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes $MKUSER_OPTIONS" "Creating username $1" \
    file "/private/var/$1" 'SF=person.badge.plus'
  elif [ "$OLD_HOME" != "/private/var/$1" ]; then
   trackNow "$3 - $4 account" \
@@ -552,7 +552,7 @@ done
 DIALOG_ICON="${"$( defaultRead dialogIcon )":-"caution"}"
 ADMIN_ICON="${"$( defaultRead adminPicture )":-"--no-picture"}"
 if [ "$ADMIN_ICON" != "--no-picture" ]; then
- ADMIN_ICON="--picture $ADMIN_ICON"
+ ADMIN_ICON="--picture '$ADMIN_ICON'"
 fi
 TRACKER_COMMAND="/tmp/completeEnrolment.DIALOG_COMMANDS.log"
 INSTALLS_JSON="$PREFS/completeEnrolment-installs.json"
@@ -1366,8 +1366,8 @@ case $1 in
    EMAIL_BODY+="<b>Installed:</b> $SUCCESS_COUNT\n"
    EMAIL_BODY+="<b>Failed:</b> $FAILED_COUNT\n"
    EMAIL_BODY+="<b>Completed Tasks:</b> $FULLSUCCESS_COUNT\n"
-   EMAIL_BODY+="\nThe initial log is available at: "
-   EMAIL_BODY+="<a href=\"${JAMF_URL}computers.html?id=$( defaultRead jssID )&o=r&v=history\">${JAMF_URL}computers.html?id=$( defaultRead jssID )&o=r&v=history</a>,\n"
+   LOG_URL="${JAMF_URL}computers.html?id=$( defaultRead jssID )&o=r&v=history"
+   EMAIL_BODY+="\nThe initial log is available at: <a href=\"$LOG_URL\">$LOG_URL</a>,\n"
    EMAIL_BODY+="with full logs available in the /Library/Logs folder on the computer.\n"
    EMAIL_BODY+="Please review the logs and contact ${"$( defaultRead serviceName )":-"Service Management"} if any assistance is required.\n\n\n"
 
