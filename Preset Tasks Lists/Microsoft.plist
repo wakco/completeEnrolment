@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>name</key>
+    <string>Microsoft Office Base Applications</string>
+    <key>subtitle</key>
+    <string>Excel - PowerPoint - Word - OneNote - OneDrive - Windows App</string>
+    <key>taskIcon</key>
+    <string>https://ics.services.jamfcloud.com/icon/hash_e3247dad6880725ff22a771beb51a910a37c1afd41c67d0d4d113c58543b9591</string>
+    <key>installs</key>
+    <array>
+      <dict>
+        <key>title</key>
+        <string>Microsoft Company Portal</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/13F.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Company Portal.app</string>
+        <key>successteam</key>
+        <string>UBF8T346G9</string>
+        <key>backuptype</key>
+        <string>install</string>
+        <key>backupcommand</key>
+        <string>microsoftcompanyportal</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Microsoft Defender</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/256.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Microsoft Defender.app</string>
+        <key>successteam</key>
+        <string>UBF8T346G9</string>
+        <key>backuptype</key>
+        <string>install</string>
+        <key>backupcommand</key>
+        <string>microsoftdefender</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Microsoft Edge</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/1D4.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Microsoft Edge.app</string>
+        <key>successteam</key>
+        <string>UBF8T346G9</string>
+        <key>backuptype</key>
+        <string>install</string>
+        <key>backupcommand</key>
+        <string>microsoftedge</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Microsoft Excel</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/09C.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Microsoft Excel.app</string>
+        <key>successteam</key>
+        <string>UBF8T346G9</string>
+        <key>backuptype</key>
+        <string>install</string>
+        <key>backupcommand</key>
+        <string>microsoftexcel</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Microsoft OneDrive</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/09D.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/OneDrive.app</string>
+        <key>successteam</key>
+        <string>UBF8T346G9</string>
+        <key>backuptype</key>
+        <string>install</string>
+        <key>backupcommand</key>
+        <string>microsoftonedrive</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Microsoft OneNote</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/09F.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Microsoft OneNote.app</string>
+        <key>successteam</key>
+        <string>UBF8T346G9</string>
+        <key>backuptype</key>
+        <string>install</string>
+        <key>backupcommand</key>
+        <string>microsoftonenote</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Microsoft Outlook</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/0A1.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Microsoft Outlook.app</string>
+        <key>successteam</key>
+        <string>UBF8T346G9</string>
+        <key>backuptype</key>
+        <string>install</string>
+        <key>backupcommand</key>
+        <string>microsoftoutlook</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Microsoft PowerPoint</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/0A3.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Microsoft PowerPoint.app</string>
+        <key>successteam</key>
+        <string>UBF8T346G9</string>
+        <key>backuptype</key>
+        <string>install</string>
+        <key>backupcommand</key>
+        <string>microsoftpowerpoint</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Microsoft Teams</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/5E3.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Microsoft Teams.app</string>
+        <key>successteam</key>
+        <string>UBF8T346G9</string>
+        <key>backuptype</key>
+        <string>install</string>
+        <key>backupcommand</key>
+        <string>microsoftteamsnew</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Microsoft Windows App</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/67E.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Windows App.app</string>
+        <key>successteam</key>
+        <string>UBF8T346G9</string>
+        <key>backuptype</key>
+        <string>install</string>
+        <key>backupcommand</key>
+        <string>microsoftwindowsapp</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Microsoft Word</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/0A6.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Microsoft Word.app</string>
+        <key>successteam</key>
+        <string>UBF8T346G9</string>
+        <key>backuptype</key>
+        <string>install</string>
+        <key>backupcommand</key>
+        <string>microsoftword</string>
+      </dict>
+    </array>
+  </dict>
+</plist>
+

@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.0"
+VERSION="1.2"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -324,6 +324,7 @@ testIt() {
    THE_TEST="$3"
   ;|
   *)
+   logIt "Testing with '$THE_TEST'..."
    if eval "$THE_TEST" 2>&1 >> "$LOG_FILE"; then
     track update status success
     if [ "$RESPONSE" = "" ]; then
@@ -972,9 +973,10 @@ case $1 in
   sleep 2
   
   # MARK: Start Self Service
-  trackNow "Opening $( echo "$SELF_SERVICE" | sed -E 's=.*/(.*)\.app$=\1=' )" \
-   secure "launchctl asuser $( id -u $WHO_LOGGED ) osascript -e 'tell application \"Finder\" to open POSIX file \"$SELF_SERVICE\"' ; sleep 5" "$( echo "$SELF_SERVICE" | sed -E 's=.*/(.*)\.app$=\1=' ) may be required for some installs" \
-   test "[ \"\$( pgrep 'Self Servic(e|e\+)\$' )\" != '' ]" 'SF=square.and.arrow.down.badge.checkmark'
+  SELF_SERVICE_NAME="$( echo "$SELF_SERVICE" | sed -E 's=.*/(.*)\.app$=\1=' )"
+  trackNow "Opening $SELF_SERVICE_NAME" \
+   secure "launchctl asuser $( id -u $WHO_LOGGED ) open -j -g -a '$SELF_SERVICE' ; sleep 5" "$SELF_SERVICE_NAME may be required for some installs" \
+   test "[ \"\$( pgrep 'Self Servic(e|e\\+)\$' )\" != '' ]" 'SF=square.and.arrow.down.badge.checkmark'
   sleep 2
 
   # MARK: Add/update JAMF ADMIN
@@ -1078,12 +1080,10 @@ case $1 in
    track integer trackitem ${$( jq 'currentitem' ):--1}
 
    runIt "plutil -convert json -o '$INSTALLS_JSON' '$DEFAULTS_FILE'"
-   THE_TITLE="$( /usr/bin/jq -Mr '.name // empty' "$INSTALLS_JSON" )"
-   if [ "$THE_TITLE" = "" ]; then
-    THE_TITLE="Main"
-   fi
+   THE_TITLE="${"$( /usr/bin/jq -Mr '.name // empty' "$INSTALLS_JSON" )":-"Main"}"
    trackNew "$THE_TITLE"
-   track update icon 'SF=doc.text'
+   LIST_ICON="${"$( plutil -extract 'taskIcon' raw -o - "$INSTALLS_JSON" )":-"SF=doc.text"}"
+   track update icon "$LIST_ICON"
    track update status wait
    track update subtitle "$( /usr/bin/jq -Mr '.subtitle // empty' "$INSTALLS_JSON" )"
    if [ "$( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )" = "" ]; then
@@ -1098,17 +1098,15 @@ case $1 in
      logIt "Reading Config File: $LIST_FILE"
      if [ "$( plutil -extract 'installs' raw -o - "$LIST_FILE" 2>/dev/null )" -gt 0 ]; then
       CURRENT_INSTALLS="$( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )"
-      THE_TITLE="$( plutil -extract 'name' raw -o - "$LIST_FILE" )"
-      if [ "$THE_TITLE" = "" ]; then
-       THE_TITLE="$( echo "$LIST_FILE" | sed -E "s=^$DEFAULTS_BASE-(.*)\.plist\$=\\1=" )"
-      fi
+      THE_TITLE="${"$( plutil -extract 'name' raw -o - "$LIST_FILE" )":-"$( echo "$LIST_FILE" | sed -E "s=^$DEFAULTS_BASE-(.*)\.plist\$=\\1=" )"}"
       plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loading task list $THE_TITLE..." "$TRACKER_JSON"
       echo "listitem: index: $( jq 'trackitem' ), statustext: Loading task list $THE_TITLE..." >> "$TRACKER_COMMAND"
       sleep 0.1
       trackNew "$THE_TITLE"
       if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
        track update subtitle "$( plutil -extract 'subtitle' raw -o - "$LIST_FILE" )"
-       track update icon 'SF=doc.text'
+       LIST_ICON="${"$( plutil -extract 'taskIcon' raw -o - "$LIST_FILE" )":-"SF=doc.text"}"
+       track update icon "$LIST_ICON"
        track update status wait
        track update statustext "Loading $LIST_FILE..."
        for (( i = 0; i < $( plutil -extract 'installs' raw -o - "$LIST_FILE" 2>dev/null ); i++ )); do
@@ -1176,25 +1174,21 @@ case $1 in
        track update successtype "$( listRead "installs.$( jq 'installCount' ).successtype" )"
        track update successtest "$( listRead "installs.$( jq 'installCount' ).successtest" )"
        track update successteam "$( listRead "installs.$( jq 'installCount' ).successteam" )"
-       THE_ICON="$( listRead "installs.$( jq 'installCount' ).icon" )"
-       if [ "$THE_ICON" = "" ]; then
-        track update icon none
-       else
-        case $THE_ICON; in
-         http*)
-          # Cache the icon locally, as scrolling the window causes swiftDialog to reload the icons, which is
-          #  not so good when they are hosted, so downloading them to a folder and directing swiftDialog to
-          #  the downloaded copy makes much more sense.
-          ICON_NAME="$CACHE/$( basename "$THE_ICON" )"
-          runIt "curl -s -o '$ICON_NAME' '$THE_ICON'"
-          THE_ICON="$CACHE/icon-$( jq 'installCount' )-$( jq 'currentitem' ).png"
-          runIt "sips -s format png '$ICON_NAME' --out '$THE_ICON'"
-         ;&
-         *)
-          track update icon "$THE_ICON"
-         ;;
-        esac
-       fi
+       THE_ICON="${"$( listRead "installs.$( jq 'installCount' ).icon" )":-"SF=questionmark.app.dashed"}"
+       case $THE_ICON; in
+        http*)
+         # Cache the icon locally, as scrolling the window causes swiftDialog to reload the icons, which is
+         #  not so good when they are hosted, so downloading them to a folder and directing swiftDialog to
+         #  the downloaded copy makes much more sense.
+         ICON_NAME="$CACHE/$( basename "$THE_ICON" )"
+         runIt "curl -s -o '$ICON_NAME' '$THE_ICON'"
+         THE_ICON="$CACHE/icon-$( jq 'installCount' )-$( jq 'currentitem' ).png"
+         runIt "sips -s format png '$ICON_NAME' --out '$THE_ICON'"
+        ;&
+        *)
+         track update icon "$THE_ICON"
+        ;;
+       esac
        
        THE_BACKUPTYPE="$( listRead "installs.$( jq 'installCount' ).backuptype" )"
        if [ "$THE_BACKUPTYPE" = "" ]; then

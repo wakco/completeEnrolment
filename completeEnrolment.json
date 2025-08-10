@@ -219,6 +219,10 @@
    "title": "Description for this list",
    "type": "string"
   },
+  "taskIcon": {
+   "title": "Icon for this list",
+   "type": "string"
+  },
   "installs": {
    "title": "Installs/Tasks",
    "description": "",
