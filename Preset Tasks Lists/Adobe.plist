@@ -40,7 +40,7 @@
         <key>successtype</key>
         <string>teamid</string>
         <key>successtest</key>
-        <string>/Applications/After Effects '*'/After Effects '*'.app</string>
+        <string>/Applications/Adobe After Effects '*'/Adobe After Effects '*'.app</string>
         <key>successteam</key>
         <string>JQ525L2MZD</string>
         <key>backuptype</key>
@@ -58,7 +58,7 @@
         <key>successtype</key>
         <string>teamid</string>
         <key>successtest</key>
-        <string>/Applications/Animate 2024/Animate 2024.app</string>
+        <string>/Applications/Adobe Animate 2024/Adobe Animate 2024.app</string>
         <key>successteam</key>
         <string>JQ525L2MZD</string>
         <key>backuptype</key>
@@ -76,7 +76,7 @@
         <key>successtype</key>
         <string>teamid</string>
         <key>successtest</key>
-        <string>/Applications/Audition '*'/Audition '*'.app</string>
+        <string>/Applications/Adobe Audition '*'/Adobe Audition '*'.app</string>
         <key>successteam</key>
         <string>JQ525L2MZD</string>
         <key>backuptype</key>
@@ -94,7 +94,7 @@
         <key>successtype</key>
         <string>teamid</string>
         <key>successtest</key>
-        <string>/Applications/Bridge '*'/Bridge '*'.app</string>
+        <string>/Applications/Adobe Bridge '*'/Adobe Bridge '*'.app</string>
         <key>successteam</key>
         <string>JQ525L2MZD</string>
         <key>backuptype</key>
@@ -112,7 +112,7 @@
         <key>successtype</key>
         <string>teamid</string>
         <key>successtest</key>
-        <string>/Applications/Character Animator '*'/Character Animator '*'.app</string>
+        <string>/Applications/Adobe Character Animator '*'/Adobe Character Animator '*'.app</string>
         <key>successteam</key>
         <string>JQ525L2MZD</string>
         <key>backuptype</key>
@@ -148,7 +148,7 @@
         <key>successtype</key>
         <string>teamid</string>
         <key>successtest</key>
-        <string>/Applications/Dimension/Dimension.app</string>
+        <string>/Applications/Adobe Dimension/Adobe Dimension.app</string>
         <key>successteam</key>
         <string>JQ525L2MZD</string>
         <key>backuptype</key>
@@ -166,7 +166,7 @@
         <key>successtype</key>
         <string>teamid</string>
         <key>successtest</key>
-        <string>/Applications/Dreamweaver 2021/Dreamweaver 2021.app</string>
+        <string>/Applications/Adobe Dreamweaver 2021/Adobe Dreamweaver 2021.app</string>
         <key>successteam</key>
         <string>JQ525L2MZD</string>
         <key>backuptype</key>
@@ -202,7 +202,7 @@
         <key>successtype</key>
         <string>teamid</string>
         <key>successtest</key>
-        <string>/Applications/InCopy '*'/InCopy '*'.app</string>
+        <string>/Applications/Adobe InCopy '*'/Adobe InCopy '*'.app</string>
         <key>successteam</key>
         <string>JQ525L2MZD</string>
         <key>backuptype</key>
@@ -220,7 +220,7 @@
         <key>successtype</key>
         <string>teamid</string>
         <key>successtest</key>
-        <string>/Applications/InDesign '*'/InDesign '*'.app</string>
+        <string>/Applications/Adobe InDesign '*'/Adobe InDesign '*'.app</string>
         <key>successteam</key>
         <string>JQ525L2MZD</string>
         <key>backuptype</key>
@@ -256,7 +256,7 @@
         <key>successtype</key>
         <string>teamid</string>
         <key>successtest</key>
-        <string>/Applications/Lightroom Classic/Lightroom Classic.app</string>
+        <string>/Applications/Adobe Lightroom Classic/Adobe Lightroom Classic.app</string>
         <key>successteam</key>
         <string>JQ525L2MZD</string>
         <key>backuptype</key>
@@ -274,7 +274,7 @@
         <key>successtype</key>
         <string>teamid</string>
         <key>successtest</key>
-        <string>/Applications/Media Encoder '*'/Media Encoder '*'.app</string>
+        <string>/Applications/Adobe Media Encoder '*'/Adobe Media Encoder '*'.app</string>
         <key>successteam</key>
         <string>JQ525L2MZD</string>
         <key>backuptype</key>
@@ -292,7 +292,7 @@
         <key>successtype</key>
         <string>teamid</string>
         <key>successtest</key>
-        <string>/Applications/Photoshop '*'/Photoshop '*'.app</string>
+        <string>/Applications/Adobe Photoshop '*'/Adobe Photoshop '*'.app</string>
         <key>successteam</key>
         <string>JQ525L2MZD</string>
         <key>backuptype</key>
@@ -310,7 +310,7 @@
         <key>successtype</key>
         <string>teamid</string>
         <key>successtest</key>
-        <string>/Applications/Premiere Pro '*'/Premiere Pro '*'.app</string>
+        <string>/Applications/Adobe Premiere Pro '*'/Adobe Premiere Pro '*'.app</string>
         <key>successteam</key>
         <string>JQ525L2MZD</string>
         <key>backuptype</key>
@@ -346,7 +346,7 @@
         <key>successtype</key>
         <string>teamid</string>
         <key>successtest</key>
-        <string>/Applications/Substance 3D Designer/Substance 3D Designer.app</string>
+        <string>/Applications/Adobe Substance 3D Designer/Adobe Substance 3D Designer.app</string>
         <key>successteam</key>
         <string>JQ525L2MZD</string>
         <key>backuptype</key>
@@ -382,7 +382,7 @@
         <key>successtype</key>
         <string>teamid</string>
         <key>successtest</key>
-        <string>/Applications/Substance 3D Sampler/Substance 3D Sampler.app</string>
+        <string>/Applications/Adobe Substance 3D Sampler/Adobe Substance 3D Sampler.app</string>
         <key>successteam</key>
         <string>JQ525L2MZD</string>
         <key>backuptype</key>
@@ -400,7 +400,7 @@
         <key>successtype</key>
         <string>teamid</string>
         <key>successtest</key>
-        <string>/Applications/Substance 3D Stager/Substance 3D Stager.app</string>
+        <string>/Applications/Adobe Substance 3D Stager/Adobe Substance 3D Stager.app</string>
         <key>successteam</key>
         <string>JQ525L2MZD</string>
         <key>backuptype</key>
@@ -418,7 +418,7 @@
         <key>successtype</key>
         <string>teamid</string>
         <key>successtest</key>
-        <string>/Applications/XD/XD.app</string>
+        <string>/Applications/Adobe XD/Adobe XD.app</string>
         <key>successteam</key>
         <string>JQ525L2MZD</string>
         <key>backuptype</key>

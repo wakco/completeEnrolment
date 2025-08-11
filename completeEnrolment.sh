@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.4"
+VERSION="1.5"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -130,10 +130,9 @@ readSaved() {
 }
 
 runIt() {
- THE_RETURN=0
- local THE_RESULT="$( eval "$1 ; THE_RETURN=\$?" 2>&1 )"
- echo "$(date) --- Executed '${2:-"$1"}' which returned signal $THE_RETURN and:\n$THE_RESULT" | tee -a "$LOG_FILE"
- return $THE_RETURN
+ local THE_RETURN="$( eval "$1 ; THE_RESULT=\$?" 2>&1 )"
+ echo "$(date) --- Executed '${2:-"$1"}' which returned signal $THE_RESULT and:\n$THE_RETURN" | tee -a "$LOG_FILE"
+ return $THE_RESULT
 }
 
 # MARK: mailSend
@@ -427,8 +426,7 @@ trackIt() {
    sleep 30
   ;;
  esac
- THE_RESULT=$?
- testIt $? $3 $4 $5
+ testIt $THE_RESULT $3 $4 $5
  return $?
 }
 
@@ -447,9 +445,6 @@ repeatIt() {
   return 1
  else
   track update status success
-  if [[ "$3" != (date|pause) ]]; then
-   track update statustext "Completed"
-  fi
   unset COUNT
   return 0
  fi
