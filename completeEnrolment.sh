@@ -480,7 +480,7 @@ trackNow() {
    secure)
     track update subtitle "$4"
     shift
-   :|
+   ;|
    policy)
     track update subtitle "Jamf Policy - $3"
    ;|
