@@ -295,7 +295,7 @@ testIt() {
    THE_TEST=false
   ;|
   appstore|teamid)
-   if CHECKAPP="$( spctl -a -vv "$3" 2>&1 )"; then
+   if CHECKAPP="$( runIt "spctl -a -vv '$3'" )"; then
     THE_TEST=true
     case $CHECKAPP in
      *'Mac App Store'*)

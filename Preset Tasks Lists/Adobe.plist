@@ -1,0 +1,429 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>name</key>
+    <string>Adobe</string>
+    <key>subtitle</key>
+    <string>All Adobe Creative Cloud Applications</string>
+    <key>taskIcon</key>
+    <string>https://appinstallers-packages.services.jamfcloud.com/icons/001.png</string>
+    <key>installs</key>
+    <array>
+      <dict>
+        <key>title</key>
+        <string>Adobe Acrobat DC</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/029.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Adobe Acrobat DC/Adobe Acrobat.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe After Effects</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/5E8.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/After Effects '*'/After Effects '*'.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe Animate</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/5EB.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Animate 2024/Animate 2024.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe Audition</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/5E6.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Audition '*'/Audition '*'.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe Bridge</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/5C5.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Bridge '*'/Bridge '*'.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe Character Animator</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/5E9.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Character Animator '*'/Character Animator '*'.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe Creative Cloud</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/001.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Utilities/Adobe Creative Cloud/ACC/Creative Cloud.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe Dimension</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/08A.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Dimension/Dimension.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe Dreamweaver</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/2CE.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Dreamweaver 2021/Dreamweaver 2021.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe Illustrator</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/5EC.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Adobe Illustrator '*'/Adobe Illustrator.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe InCopy</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/5EA.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/InCopy '*'/InCopy '*'.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe InDesign</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/5E5.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/InDesign '*'/InDesign '*'.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe Lightroom CC</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/08B.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Adobe Lightroom CC/Adobe Lightroom.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe Lightroom Classic</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/027.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Lightroom Classic/Lightroom Classic.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe Media Encoder</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/5E7.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Media Encoder '*'/Media Encoder '*'.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe Photoshop</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/5C4.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Photoshop '*'/Photoshop '*'.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe Premiere Pro</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/5E4.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Premiere Pro '*'/Premiere Pro '*'.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe Premiere Rush</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/4D3.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Adobe Premiere Rush 2.0/Adobe Premiere Rush.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe Substance 3D Designer</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/399.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Substance 3D Designer/Substance 3D Designer.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe Substance 3D Painter</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/39B.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Substance 3D Painter/Substance 3D Painter.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe Substance 3D Sampler</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/39A.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Substance 3D Sampler/Substance 3D Sampler.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe Substance 3D Stager</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/39C.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/Substance 3D Stager/Substance 3D Stager.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+      <dict>
+        <key>title</key>
+        <string>Adobe XD</string>
+        <key>subtitletype</key>
+        <string>command</string>
+        <key>commandtype</key>
+        <string>jac</string>
+        <key>icon</key>
+        <string>https://appinstallers-packages.services.jamfcloud.com/icons/088.png</string>
+        <key>successtype</key>
+        <string>teamid</string>
+        <key>successtest</key>
+        <string>/Applications/XD/XD.app</string>
+        <key>successteam</key>
+        <string>JQ525L2MZD</string>
+        <key>backuptype</key>
+        <string>none</string>
+      </dict>
+    </array>
+  </dict>
+</plist>
