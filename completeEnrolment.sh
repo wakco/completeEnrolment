@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.3"
+VERSION="1.4"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -349,7 +349,7 @@ testIt() {
 
 # MARK: trackIt
 # command type (command/policy/label), (shell command, jamf policy trigger, or Installomator label),
-#  status confirmation type, file to check for (for status confirmation type: file), Team ID
+#  status confirmation type, file to check for (for test types: file or teamid), Team ID
 trackIt() {
  local THE_COUNT=""
  if [ COUNT != "" ]; then
@@ -437,7 +437,7 @@ trackIt() {
 # MARK: repeatIt
 repeatIt() {
  COUNT=1
- until [ $COUNT -gt $PER_APP ] || trackIt "$1" "$2" "$3" "$4"; do
+ until [ $COUNT -gt $PER_APP ] || trackIt "$1" "$2" "$3" "$4" "$5"; do
   infoBox
   sleep 2
   ((COUNT++))
@@ -476,14 +476,13 @@ trackNow() {
  if [ "$( jq 'listitem[.currentitem].status' )" = "success" ]; then
   return 0
  else
-  case $2 in
+  local COMMAND_TYPE="$2"
+  local COMMAND_NOW="$3"
+  case $COMMAND_TYPE in
    secure)
     track update subtitle "$4"
-    if [ "$7" != "" ]; then
-     track update icon "$7"
-    fi
-    repeatIt "$2" "$3" "$5" "$6"
-   ;;
+    shift
+   :|
    policy)
     track update subtitle "Jamf Policy - $3"
    ;|
@@ -494,10 +493,17 @@ trackNow() {
     track update subtitle "$3"
    ;|
    *)
+    local TEST_TYPE="$4"
+    local TEST_NOW="$5"
+    local TEST_TEAM=""
+    if [ "$TEST_TYPE" = "teamid" ]; then
+     TEST_TEAM="$6"
+     shift
+    fi
     if [ "$6" != "" ]; then
      track update icon "$6"
     fi
-    repeatIt "$2" "$3" "$4" "$5"
+    repeatIt "$COMMAND_TYPE" "$COMMAND_NOW" "$TEST_TYPE" "$TEST_NOW" "$TEST_TEAM"
    ;;
   esac
   THE_RESULT=$?
@@ -677,7 +683,7 @@ case $1 in
   # MARK: Install swiftDialog
   trackNow "Installing swiftDialog (the software generating this window)" \
    install dialog \
-   file "$C_DIALOG" 'SF=macwindow.badge.plus'
+   teamid "$C_DIALOG" 'PWA5E9TQ59' 'SF=macwindow.badge.plus'
   
   
   # Executed by Jamf Pro
