@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.2"
+VERSION="1.3"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -132,8 +132,8 @@ readSaved() {
 }
 
 runIt() {
- local THE_RESULT="$( eval "$1" 2>&1 )"
- local THE_RETURN=$?
+ THE_RETURN=0
+ local THE_RESULT="$( eval "$1 ; THE_RETURN=\$?" 2>&1 )"
  echo "$(date) --- Executed '${2:-"$1"}' which returned signal $THE_RETURN and:\n$THE_RESULT" | tee -a "$LOG_FILE"
  return $THE_RETURN
 }
@@ -295,7 +295,8 @@ testIt() {
    THE_TEST=false
   ;|
   appstore|teamid)
-   if CHECKAPP="$( runIt "spctl -a -vv '$3'" )"; then
+   if eval "[ -e '$3' ]"; then
+    CHECKAPP="$( runIt "spctl -a -vv '$3'" )"
     THE_TEST=true
     case $CHECKAPP in
      *'Mac App Store'*)
