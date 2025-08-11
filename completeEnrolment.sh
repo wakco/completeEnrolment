@@ -306,7 +306,7 @@ testIt() {
       RESPONSE="Installed and Verified (Team ID $4)"
      ;;
      *)
-      RESPONSE="Installed, but Team ID ($4) didn't match (ID $( echo "$CHECKAPP" | awk '/origin=/ { print $NF }' | tr -d '()' ))"
+      RESPONSE="Installed. But Team ID ($4) didn't match (ID $( echo "$CHECKAPP" | awk '/origin=/ { print $NF }' | tr -d '()' ))"
      ;;
     esac
    else
