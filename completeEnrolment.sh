@@ -295,7 +295,7 @@ testIt() {
    THE_TEST=false
   ;|
   appstore|teamid)
-   if eval "[ -e '$3' ]"; then
+   if [ "$( eval "ls -d '$3'" 2>/dev/null | wc -l )" -gt 0 ]; then
     CHECKAPP="$( runIt "spctl -a -vv '$3'" )"
     THE_TEST=true
     case $CHECKAPP in
