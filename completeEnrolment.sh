@@ -37,8 +37,6 @@ SELF_SERVICE="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist 
 if [ "$SELF_SERVICE" = "" ]; then
  SELF_SERVICE="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist self_service_app_path 2>/dev/null )"
 fi
-CPU_ARCH="$( arch )"
-TEST_ONLY=false
 
 # MARK: Whose logged in
 
@@ -659,7 +657,7 @@ case $1 in
   
   # MARK: Install Rosetta
   #  (just in case, and skip it for macOS 28+)
-  if [ "$CPU_ARCH" = "arm64" ] && [ $(sw_vers -productVersion | cut -d '.' -f 1) -lt 28 ]; then
+  if [ "$( arch )" = "arm64" ] && [ $(sw_vers -productVersion | cut -d '.' -f 1) -lt 28 ]; then
    trackNow "Installing Rosetta for Apple Silicon Mac Intel compatibility" \
     command "/usr/sbin/softwareupdate --install-rosetta --agree-to-license" \
     file "/Library/Apple/usr/libexec/oah/libRosettaRuntime" 'SF=rosette'
