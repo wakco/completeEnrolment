@@ -130,7 +130,8 @@ readSaved() {
 }
 
 runIt() {
- local THE_RETURN="$( eval "$1 ; THE_RESULT=\$?" 2>&1 )"
+ THE_RETURN="$( eval "$1" 2>&1 )"
+ THE_RESULT=$?
  echo "$(date) --- Executed '${2:-"$1"}' which returned signal $THE_RESULT and:\n$THE_RETURN" | tee -a "$LOG_FILE"
  return $THE_RESULT
 }
@@ -499,7 +500,6 @@ trackNow() {
     repeatIt "$COMMAND_TYPE" "$COMMAND_NOW" "$TEST_TYPE" "$TEST_NOW" "$TEST_TEAM"
    ;;
   esac
-  THE_RESULT=$?
   infoBox
   # Process error here?
   return $THE_RESULT
