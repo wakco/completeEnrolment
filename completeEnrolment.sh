@@ -1496,7 +1496,7 @@ case $1 in
    sleep 1
   done
   
-  If [ "$( pgrep 'Migration Assistant' )" = "" ] && [ "$WHO_LOGGED" = "$TEMP_ADMIN" ]; then
+  if [ "$( pgrep 'Migration Assistant' )" = "" ] && [ "$WHO_LOGGED" = "$TEMP_ADMIN" ]; then
    shutdown -r now
   fi
  ;;
