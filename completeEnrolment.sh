@@ -1355,7 +1355,7 @@ case $1 in
    EMAIL_BODY+="<b>Last Restart:</b>  $( date -jr "$START_TIME" "+%d/%m/%Y %H:%M %Z" )\n"
    EMAIL_BODY+="<b>Estimated Finish:</b>  $( date -jr "$FINISH_TIME" "+%d/%m/%Y %H:%M %Z" )\n"
    EMAIL_BODY+="<b>Finished at:</b> $( date -jr "$FINISHED" "+%d/%m/%Y %H:%M %Z" )\n"
-   EMAIL_BODY+="<b>Total Tasks:</b> $( plutil -extract listitem raw -o - "$TRACKER_JSON" )\n"
+   EMAIL_BODY+="<b>Total Tasks:</b> $(($( plutil -extract listitem raw -o - "$TRACKER_JSON" )-1))\n"
    EMAIL_BODY+="<b>Apps to Install:</b> $( jq 'installCount' )\n"
    EMAIL_BODY+="<b>Installed:</b> $SUCCESS_COUNT\n"
    EMAIL_BODY+="<b>Failed:</b> $FAILED_COUNT\n"
