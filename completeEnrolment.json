@@ -88,6 +88,21 @@
     }
    }
   },
+  "appearance": {
+   "title": "Dark or Light Dialog?",
+   "description": "swiftDialog has the ability to define it's appearence, this will set the dialog theme accordingly. Default is the macOS default of Light",
+   "type": "boolean",
+   "enum": [
+    true,
+    false
+   ],
+   "options": {
+    "enum_titles": [
+     "Dark",
+     "Light"
+    ]
+   }
+  },
   "corpName": {
    "title": "Corporate Name",
    "description": "Name or contact reference when sending warnings about network type being used. Defaults to 'The Service Desk'.",

@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.6"
+VERSION="1.7"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -622,6 +622,11 @@ case $1 in
   track string position "bottom"
   track string height "90%"
   track string width "90%"
+  if defaultReadBool appearance; then
+   track string appearance dark
+  else
+   track string appearance light
+  fi
   track bool blurscreen true
   ditto "$TRACKER_JSON" "$LOG_JSON"
   plutil -insert listitem -array "$TRACKER_JSON"
@@ -1474,13 +1479,15 @@ case $1 in
    date '' 'SF=list.bullet.rectangle'
   
   # MARK: Shutdown Self Service
-  trackNow "Closing $SELF_SERVICE_NAME" \
-   secure "launchctl asuser $( id -u $WHO_LOGGED ) osascript -e 'tell app \"$SELF_SERVICE_NAME\" to quit' ; sleep 5" \
-   test "[ \"\$( pgrep 'Self Servic(e|e\\+)\$' )\" = '' ]" 'SF=square.and.arrow.down.badge.checkmark'
+  if [ $FAILED_COUNT -eq 0 ]; then
+   trackNow "Closing $SELF_SERVICE_NAME" \
+    secure "launchctl asuser $( id -u $WHO_LOGGED ) osascript -e 'tell app \"$SELF_SERVICE_NAME\" to quit' ; sleep 5" "$SELF_SERVICE_NAME is no longer needed as Installs have completed" \
+    test "[ \"\$( pgrep 'Self Servic(e|e\\+)\$' )\" = '' ]" 'SF=square.and.arrow.down.badge.checkmark'
+  fi
 
   # MARK: Wait for user
   infoBox done
-  if [ "$( pgrep 'Migration Assistant' )" = "" ] && [ "$WHO_LOGGED" = "$TEMP_ADMIN" ]; then
+  if [ "$( pgrep 'Migration Assistant' )" = "" ] && [ "$WHO_LOGGED" = "$TEMP_ADMIN" ] && [ $FAILED_COUNT -eq 0 ]; then
    echo "button1text: Restart Now" >> "$TRACKER_COMMAND"
   elif [ "$( pgrep 'Migration Assistant' )" != "" ]; then
    echo "button1text: Migration Assistant..." >> "$TRACKER_COMMAND"
@@ -1496,7 +1503,7 @@ case $1 in
    sleep 1
   done
   
-  if [ "$( pgrep 'Migration Assistant' )" = "" ] && [ "$WHO_LOGGED" = "$TEMP_ADMIN" ]; then
+  if [ "$( pgrep 'Migration Assistant' )" = "" ] && [ "$WHO_LOGGED" = "$TEMP_ADMIN" ] && [ $FAILED_COUNT -eq 0 ]; then
    shutdown -r now
   fi
  ;;
