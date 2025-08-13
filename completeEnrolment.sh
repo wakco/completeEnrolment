@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.5"
+VERSION="1.6"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -1473,9 +1473,20 @@ case $1 in
    secure "'$C_JAMF' recon" "Updates inventory one last time" \
    date '' 'SF=list.bullet.rectangle'
   
+  # MARK: Shutdown Self Service
+  trackNow "Closing $SELF_SERVICE_NAME" \
+   secure "launchctl asuser $( id -u $WHO_LOGGED ) osascript -e 'tell app \"$SELF_SERVICE_NAME\" to quit' ; sleep 5" \
+   test "[ \"\$( pgrep 'Self Servic(e|e\\+)\$' )\" = '' ]" 'SF=square.and.arrow.down.badge.checkmark'
+
   # MARK: Wait for user
   infoBox done
-  echo "button1text: Finish" >> "$TRACKER_COMMAND"
+  If [ "$( pgrep 'Migration Assistant' )" = "" ] && [ "$WHO_LOGGED" = "$TEMP_ADMIN" ]; then
+   echo "button1text: Restart Now" >> "$TRACKER_COMMAND"
+  elif [ "$( pgrep 'Migration Assistant' )" != "" ]; then
+   echo "button1text: Migration Assistant..." >> "$TRACKER_COMMAND"
+  else
+   echo "button1text: Close" >> "$TRACKER_COMMAND"
+  fi
   sleep 0.1
   echo "end:" >> "$TRACKER_COMMAND"
   
@@ -1485,6 +1496,9 @@ case $1 in
    sleep 1
   done
   
+  If [ "$( pgrep 'Migration Assistant' )" = "" ] && [ "$WHO_LOGGED" = "$TEMP_ADMIN" ]; then
+   shutdown -r now
+  fi
  ;;
  # MARK: Clean up
  cleanUp)
