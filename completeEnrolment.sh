@@ -1480,7 +1480,7 @@ case $1 in
 
   # MARK: Wait for user
   infoBox done
-  If [ "$( pgrep 'Migration Assistant' )" = "" ] && [ "$WHO_LOGGED" = "$TEMP_ADMIN" ]; then
+  if [ "$( pgrep 'Migration Assistant' )" = "" ] && [ "$WHO_LOGGED" = "$TEMP_ADMIN" ]; then
    echo "button1text: Restart Now" >> "$TRACKER_COMMAND"
   elif [ "$( pgrep 'Migration Assistant' )" != "" ]; then
    echo "button1text: Migration Assistant..." >> "$TRACKER_COMMAND"
