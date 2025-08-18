@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.7"
+VERSION="1.00"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -1186,7 +1186,7 @@ case $1 in
          #  not so good when they are hosted, so downloading them to a folder and directing swiftDialog to
          #  the downloaded copy makes much more sense.
          ICON_NAME="$CACHE/$( basename "$THE_ICON" )"
-         runIt "curl -s -o '$ICON_NAME' '$THE_ICON'"
+         runIt "curl -sL -o '$ICON_NAME' '$THE_ICON'"
          THE_ICON="$CACHE/icon-$( jq 'installCount' )-$( jq 'currentitem' ).png"
          runIt "sips -s format png '$ICON_NAME' --out '$THE_ICON'"
         ;&
