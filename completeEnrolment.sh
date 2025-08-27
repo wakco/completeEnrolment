@@ -28,7 +28,7 @@ LOGIN_PLIST="$LIB/LaunchAgents/$DEFAULTS_PLIST"
 CLEANUP_FILES+=( "$LOGIN_PLIST" )
 SETTINGS_PLIST="$PREFS/$DEFAULTS_PLIST"
 CLEANUP_FILES+=( "$SETTINGS_PLIST" )
-CACHE="$LIB/Caches/completeEnrolment"
+CACHE="$LIB/Caches/$DEFAULTS_NAME"
 mkdir -p "$CACHE"
 CLEANUP_FILES+=( "$CACHE" )
 JAMF_URL="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist jss_url )"
@@ -204,7 +204,7 @@ infoBox() {
  if [ "$1" != "done" ]; then
   if [ "$TASKSLOADING" != "" ]; then
    INFOBOX+="$TASKSLOADING  <br><br>"
-  esac
+  fi
   INFOBOX+="**Current Task:** $(($( jq 'currentitem' )+1))  <br>$( jq 'listitem[.currentitem].title' )  <br><br>"
  fi
  if [ "$COUNT" != "" ]; then
