@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.00"
+VERSION="1.01"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -202,6 +202,9 @@ infoBox() {
  fi
  INFOBOX+="**Total Tasks:** $( plutil -extract listitem raw -o - "$TRACKER_JSON" )  <br><br>"
  if [ "$1" != "done" ]; then
+  if [ "$TASKSLOADING" != "" ]; then
+   INFOBOX+="$TASKSLOADING  <br><br>"
+  esac
   INFOBOX+="**Current Task:** $(($( jq 'currentitem' )+1))  <br>$( jq 'listitem[.currentitem].title' )  <br><br>"
  fi
  if [ "$COUNT" != "" ]; then
@@ -234,6 +237,8 @@ infoBox() {
 # MARK: track
 track() {
  local THE_STRING="$( echo "$3" | tr -d '"' )"
+ echo "activate:" >> "$TRACKER_COMMAND"
+ sleep 0.1
  case $1 in
   bool|integer|string)
    logIt "Updating $2 of type $1 to: $THE_STRING"
@@ -1083,6 +1088,7 @@ case $1 in
    track update statustext "Loading..."
    track update subtitle "Loading the task list(s) from config profile(s)"
    track integer trackitem ${$( jq 'currentitem' ):--1}
+   
 
    runIt "plutil -convert json -o '$INSTALLS_JSON' '$DEFAULTS_FILE'"
    THE_TITLE="${"$( /usr/bin/jq -Mr '.name // empty' "$INSTALLS_JSON" )":-"Main"}"
@@ -1099,14 +1105,16 @@ case $1 in
     track update status success
     LIST_FILES="$( eval "ls '$DEFAULTS_BASE-'*" 2>/dev/null )"
     logIt "Additional Config Files to load: $LIST_FILES"
+    plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loading task list(s)..." "$TRACKER_JSON"
+    echo "listitem: index: $( jq 'trackitem' ), statustext: Loading task list(s)..." >> "$TRACKER_COMMAND"
+    sleep 0.1
     for LIST_FILE in ${(@f)LIST_FILES} ; do
      logIt "Reading Config File: $LIST_FILE"
      if [ "$( plutil -extract 'installs' raw -o - "$LIST_FILE" 2>/dev/null )" -gt 0 ]; then
       CURRENT_INSTALLS="$( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )"
       THE_TITLE="${"$( plutil -extract 'name' raw -o - "$LIST_FILE" )":-"$( echo "$LIST_FILE" | sed -E "s=^$DEFAULTS_BASE-(.*)\.plist\$=\\1=" )"}"
-      plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loading task list $THE_TITLE..." "$TRACKER_JSON"
-      echo "listitem: index: $( jq 'trackitem' ), statustext: Loading task list $THE_TITLE..." >> "$TRACKER_COMMAND"
-      sleep 0.1
+      TASKSLOADING="**Loading Task List:** $THE_TITLE..."
+      infoBox
       trackNew "$THE_TITLE"
       if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
        track update subtitle "$( plutil -extract 'subtitle' raw -o - "$LIST_FILE" )"
@@ -1145,13 +1153,13 @@ case $1 in
     infoBox
     
     # MARK: Load Installs
+    # Cheating by using TRACKER_START to update the Task List loading entry
+    plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loading tasks..." "$TRACKER_JSON"
+    echo "listitem: index: $( jq 'trackitem' ), statustext: Loading tasks..." >> "$TRACKER_COMMAND"
+    sleep 0.1
     until [ $( jq 'installCount' ) -ge $( listRead 'installs' ) ]; do
-     
-     # Cheating by using TRACKER_START to update the Task List loading entry
-     plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loading task #$(($( jq 'installCount' )+1))" "$TRACKER_JSON"
-     echo "listitem: index: $( jq 'trackitem' ), statustext: Loading task #$(($( jq 'installCount' )+1))" >> "$TRACKER_COMMAND"
-     sleep 0.1
-     
+     TASKSLOADING="**Loading Install Task:** #$(($( jq 'installCount' )+1))"
+     infoBox
      # for each item in config profile
      if [ "$( listRead "installs.$( jq 'installCount' ).title" )" != "" ] && [ "$( listRead "installs.$( jq 'installCount' ).commandtype" )" != "" ] ; then
       trackNew "$( listRead "installs.$( jq 'installCount' ).title" )"
@@ -1209,6 +1217,7 @@ case $1 in
       track integer installCount $(($( jq 'installCount' )+1))
      fi
     done
+    TASKSLOADING=""
 
     plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Inserting Pause & Inventory Update..." "$TRACKER_JSON"
     echo "listitem: index: $( jq 'trackitem' ), statustext: Inserting Pause & Inventory Update..." >> "$TRACKER_COMMAND"
