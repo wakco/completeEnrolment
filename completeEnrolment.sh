@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.01"
+VERSION="1.02"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -1519,8 +1519,10 @@ case $1 in
  # MARK: Clean up
  cleanUp)
   # A clean up routine
+  TEMP_ADMIN="${"$( defaultRead tempAdmin )":-"setup_admin"}"
   if ${$( defaultReadBool tempKeep ):-false}; then
-   TEMP_ADMIN="${"$( defaultRead tempAdmin )":-"setup_admin"}"
+   logIt "Keeping $TEMP_ADMIN as requested."
+  else
    logIt "Removing $TEMP_ADMIN as no longer required."
    runIt "sysadminctl -deleteUser '$TEMP_ADMIN' -adminUser '$TEMP_ADMIN' -adminPassword '$( readSaved laps )'" "Delete user '$TEMP_ADMIN'"
   fi
