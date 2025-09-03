@@ -1523,8 +1523,10 @@ case $1 in
   if ${$( defaultReadBool tempKeep ):-false}; then
    logIt "Keeping $TEMP_ADMIN as requested."
   else
+   TEMP_ADMIN_HOME="$( dscl . read "/Users/$TEMP_ADMIN" NFSHomeDirectory | awk -F ': ' '{ print $NF }' )"
    logIt "Removing $TEMP_ADMIN as no longer required."
-   runIt "sysadminctl -deleteUser '$TEMP_ADMIN' -adminUser '$TEMP_ADMIN' -adminPassword '$( readSaved laps )'" "Delete user '$TEMP_ADMIN'"
+   runIt "sysadminctl -deleteUser '$TEMP_ADMIN' -adminUser '$TEMP_ADMIN' -adminPassword '$( readSaved laps )'" "Deleting user '$TEMP_ADMIN'"
+   runIt "rm -rf '$TEMP_ADMIN_HOME'" "Removing '$TEMP_ADMIN' home folder: $TEMP_ADMIN_HOME"
   fi
   logIt "Removing: $CLEANUP_FILES"
   eval "rm -rf $CLEANUP_FILES"
