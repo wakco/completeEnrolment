@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.03"
+VERSION="1.04"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -1537,8 +1537,10 @@ case $1 in
     runIt "rm -rf '$TEMP_ADMIN_HOME'" "Removing '$TEMP_ADMIN' home folder: $TEMP_ADMIN_HOME"
    fi
   fi
+  logIt "For possible compliance requirement, one more Recon"
+  runIt "'$C_JAMF' recon"
   logIt "Removing: $CLEANUP_FILES"
-  eval "rm -rf $CLEANUP_FILES"
+  runIt "rm -rf $CLEANUP_FILES"
  ;;
  # MARK: Default behaviour, clean up or process
  *)
