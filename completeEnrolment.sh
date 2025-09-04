@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.02"
+VERSION="1.03"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -533,12 +533,19 @@ addAdmin() {
  fi
  OLD_HOME="$( dscl . read "/Users/$1" NFSHomeDirectory 2>/dev/null | cut -d ' ' -f 2- )"
  if [ "$OLD_HOME" = "" ]; then
+  # Account doesn't exist create it
   trackNow "$3 - $4 account" \
    secure "'$C_MKUSER' --username '$1' --password '$2' --real-name '$3' --home '/private/var/$1' --hidden userOnly --skip-setup-assistant firstLoginOnly $ADMIN_ICON --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes $MKUSER_OPTIONS" "Creating username $1" \
    file "/private/var/$1" 'SF=person.badge.plus'
  elif [ "$OLD_HOME" != "/private/var/$1" ]; then
+  # Account exists, but it is in the wrong place, move it, and add it's Secure Token
   trackNow "$3 - $4 account" \
-   secure "dscl . change '/Users/$1' NFSHomeDirectory '$OLD_HOME' '/private/var/$1' ; mv '$OLD_HOME' '/private/var/$1' ; sysadminctl -secureTokenOn '"$1"' -password '$( readSaved laps )' -adminUser '$THE_ADMIN' -adminPassword '$THE_PASS'" "Moving and securing $1"\
+   secure "dscl . change '/Users/$1' NFSHomeDirectory '$OLD_HOME' '/private/var/$1' ; mv '$OLD_HOME' '/private/var/$1' ; sysadminctl -secureTokenOn '"$1"' -password '$( readSaved laps )' -adminUser '$THE_ADMIN' -adminPassword '$THE_PASS'" "Moving and securing $1" \
+   result '' 'SF=person.badge.plus'
+ else
+  # Account exists, add it's Secure Token
+  trackNow "$3 - $4 account" \
+   secure "sysadminctl -secureTokenOn '"$1"' -password '$( readSaved laps )' -adminUser '$THE_ADMIN' -adminPassword '$THE_PASS'" "Securing $1" \
    result '' 'SF=person.badge.plus'
  fi
 }
