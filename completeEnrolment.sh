@@ -208,7 +208,7 @@ infoBox() {
   INFOBOX+="**Current Task:** $(($( jq 'currentitem' )+1))  <br>$( jq 'listitem[.currentitem].title' )  <br><br>"
  fi
  if [ "$COUNT" != "" ]; then
-  INFOBOX+="**Attempt:** $COUNT  <br><br>"
+  INFOBOX+="**Attempts/Passes:** $COUNT  <br><br>"
  fi
  if [ "$( jq 'installCount' )" != "" ]; then
   INFOBOX+="**Install Tasks:** $( jq 'installCount' )  <br><br>"
