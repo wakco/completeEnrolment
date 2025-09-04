@@ -1537,10 +1537,10 @@ case $1 in
     runIt "rm -rf '$TEMP_ADMIN_HOME'" "Removing '$TEMP_ADMIN' home folder: $TEMP_ADMIN_HOME"
    fi
   fi
-  logIt "For possible compliance requirement, one more Recon"
-  runIt "'$C_JAMF' recon"
   logIt "Removing: $CLEANUP_FILES"
   runIt "rm -rf $CLEANUP_FILES"
+  logIt "For possible compliance requirement, one more Recon"
+  runIt "'$C_JAMF' recon"
  ;;
  # MARK: Default behaviour, clean up or process
  *)
