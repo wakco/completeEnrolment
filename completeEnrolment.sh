@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.04"
+VERSION="1.05"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -1120,7 +1120,7 @@ case $1 in
      if [ "$( plutil -extract 'installs' raw -o - "$LIST_FILE" 2>/dev/null )" -gt 0 ]; then
       CURRENT_INSTALLS="$( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )"
       THE_TITLE="${"$( plutil -extract 'name' raw -o - "$LIST_FILE" )":-"$( echo "$LIST_FILE" | sed -E "s=^$DEFAULTS_BASE-(.*)\.plist\$=\\1=" )"}"
-      TASKSLOADING="**Loading Task List:** $THE_TITLE..."
+      TASKSLOADING="**Loading Task List:**  <br>$THE_TITLE..."
       infoBox
       trackNew "$THE_TITLE"
       if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
