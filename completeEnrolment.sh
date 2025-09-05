@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.05"
+VERSION="1.06"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -1022,7 +1022,9 @@ case $1 in
     if [ "$( readJSON "$JAMF_ACCOUNTS" "results[$i].userSource" )" = "JMF" ]; then
      JAMF_ADMIN="$( readJSON "$JAMF_ACCOUNTS" "results[$i].username" )"
      JAMF_GUID="$( readJSON "$JAMF_ACCOUNTS" "results[$i].guid" )"
-     break
+    fi
+    if [ "$( readJSON "$JAMF_ACCOUNTS" "results[$i].userSource" )" = "MDM" ]; then
+     LAPS_ADMIN="$( readJSON "$JAMF_ACCOUNTS" "results[$i].username" )"
     fi
    done
    if [ -z "$JAMF_ADMIN" ] || [ -z "$JAMF_GUID" ]; then
