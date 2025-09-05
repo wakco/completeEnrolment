@@ -1165,7 +1165,7 @@ case $1 in
     echo "listitem: index: $( jq 'trackitem' ), statustext: Loading tasks..." >> "$TRACKER_COMMAND"
     sleep 0.1
     until [ $( jq 'installCount' ) -ge $( listRead 'installs' ) ]; do
-     TASKSLOADING="**Loading Install Task:** #$(($( jq 'installCount' )+1))"
+     TASKSLOADING="**Loading Install Task:** $(($( jq 'installCount' )+1))"
      infoBox
      # for each item in config profile
      if [ "$( listRead "installs.$( jq 'installCount' ).title" )" != "" ] && [ "$( listRead "installs.$( jq 'installCount' ).commandtype" )" != "" ] ; then
