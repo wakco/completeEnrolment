@@ -50,7 +50,7 @@
   },
   "lapsAdmin": {
    "title": "Default IT Administrator username",
-   "description": "The username for the Default IT Administrator account, whose password is managed by macOSLAPS. This account does not get removed. Default to laps_admin.",
+   "description": "The username for the Default IT Administrator account, whose password is managed by macOSLAPS. This account does not get removed. Defaults to laps_admin, not required for PreStage enrolments where an account has been configured, as the script will collect it from the Jamf Pro API as the MDM account.",
    "type": "string",
    "options": {
     "inputAttributes": {

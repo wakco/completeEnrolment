@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.06"
+VERSION="1.07"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -93,17 +93,17 @@ LOG_FILE="$LIB/Logs/$DEFAULTS_NAME-$( if [ "$1" = "/" ]; then echo "Jamf" ; else
 
 # MARK: Functions
 
+logIt() {
+ echo "$(date) - $@" 2>&1 | tee -a "$LOG_FILE"
+}
+logIt "###################### completeEnrolment $VERSION started with $1."
+
 errorIt() {
  logIt "$2" >&2
  logIt "Removing: $CLEANUP_FILES"
  eval "rm -rf $CLEANUP_FILES"
  exit $1
 }
-
-logIt() {
- echo "$(date) - $@" 2>&1 | tee -a "$LOG_FILE"
-}
-logIt "###################### completeEnrolment $VERSION started with $1."
 
 defaultRead() {
  defaults read "$DEFAULTS_FILE" "$1" 2>/dev/null
@@ -1004,12 +1004,12 @@ case $1 in
    # finishing setting up admin accounts
    # Add JSS ADMIN
    # This will load the $JAMF_ADMIN and $JAMF_PASS login details
-   JAMF_AUTH_TOKEN="$( echo "$( curl -s --location --request POST "${JAMF_URL}api/oauth/token" \
+   JAMF_AUTH_TOKEN="$( readJSON "$( curl -s --location --request POST "${JAMF_URL}api/oauth/token" \
     --header 'Content-Type: application/x-www-form-urlencoded' \
     --data-urlencode "client_id=$( readSaved apiId )" \
     --data-urlencode 'grant_type=client_credentials' \
-    --data-urlencode "client_secret=$( readSaved apiSecret )" )" | /usr/bin/jq -Mr ".access_token" )"
-   if [[ "$JAMF_AUTH_TOKEN" = *httpStatus* ]]; then
+    --data-urlencode "client_secret=$( readSaved apiSecret )" )" "access_token" )"
+   if [ "$JAMF_AUTH_TOKEN" = "" ]; then
     "$C_DIALOG" --ontop --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to login to Jamf Pro API"
     errorIt 2 "This should not have happened, are the API ID/Secret details correct?\nResponse from $JAMF_URL:\n$JAMF_AUTH_TOKEN"
    fi
@@ -1017,7 +1017,7 @@ case $1 in
 
    JAMF_ACCOUNTS="$( curl -s "${JAMF_URL}api/v2/local-admin-password/$( defaultRead managementID )/accounts" \
     -H "accept: application/json" -H "Authorization: Bearer $JAMF_AUTH_TOKEN" )"
-   logIt "checking for JMF account in:\n$JAMF_ACCOUNTS\n"
+   logIt "Checking for JMF account in:\n$JAMF_ACCOUNTS\n"
    for (( i = 0; i < $( readJSON "$JAMF_ACCOUNTS" "totalCount" ); i++ )); do
     if [ "$( readJSON "$JAMF_ACCOUNTS" "results[$i].userSource" )" = "JMF" ]; then
      JAMF_ADMIN="$( readJSON "$JAMF_ACCOUNTS" "results[$i].username" )"
@@ -1027,6 +1027,7 @@ case $1 in
      LAPS_ADMIN="$( readJSON "$JAMF_ACCOUNTS" "results[$i].username" )"
     fi
    done
+   logIt "Collected: JAMF_ADMIN = $JAMF_ADMIN, LAPS_ADMIN = $LAPS_ADMIN"
    if [ -z "$JAMF_ADMIN" ] || [ -z "$JAMF_GUID" ]; then
     "$C_DIALOG" --ontop --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account username from Jamf Pro API"
     errorIt 2 "this should not have happened, unable to get Jamf Managed Account Details:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
