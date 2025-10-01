@@ -1,21 +1,28 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.07"
+VERSION="1.08"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
 
 C_JAMF="/usr/local/bin/jamf"
 C_INSTALL="/usr/local/Installomator/Installomator.sh"
-C_DIALOG="/Library/Application Support/Dialog/Dialog.app/Contents/MacOS/Dialog"
+C_DIALOG="/Library/Application Support/Dialog/Dialog.app/Contents/MacOS/dialogcli"
 C_MKUSER="/usr/local/bin/mkuser"
 C_ENROLMENT="/usr/local/bin/completeEnrolment"
+
+checkDialog() {
+ if [ ! -e "$C_DIALOG" ]; then
+  C_DIALOG="/Library/Application Support/Dialog/Dialog.app/Contents/MacOS/Dialog"
+ fi
+}
+checkDialog
 
 # MARK: Variables
 
 DEFAULTS_NAME="completeEnrolment"
-# If you change DEFAULTS_NAME, make sure the domain in the config profiles matches, or it won't work
+# If you change DEFAULTS_NAME, make sure the domain in the config profiles match, or it won't work
 DEFAULTS_PLIST="$DEFAULTS_NAME.plist"
 LIB="/Library"
 PREFS="/private/var/root$LIB/Preferences"
@@ -645,6 +652,7 @@ case $1 in
   track string liststyle "compact"
   track bool allowSkip true
   plutil -replace displaylog -string "$LOG_FILE" "$LOG_JSON"
+  plutil -replace loghistory -integer 1000 "$LOG_JSON"
 
   # MARK: set time
   TIME_ZONE="${"$( defaultRead systemTimeZone )":-"$( systemsetup -gettimezone | awk "{print \$NF}" )"}"
@@ -694,7 +702,8 @@ case $1 in
   trackNow "Installing swiftDialog (the software generating this window)" \
    install dialog \
    teamid "$C_DIALOG" 'PWA5E9TQ59' 'SF=macwindow.badge.plus'
-  
+  # set C_DIALOG to match the installed version of dialog
+  checkDialog
   
   # Executed by Jamf Pro
   # Load config profile settings and save them for later use in a more secure location, do the same
@@ -729,8 +738,7 @@ case $1 in
     defaults write "$LOGIN_PLIST" LimitLoadToSessionType -array "LoginWindow"
     defaults write "$LOGIN_PLIST" Label "$DEFAULTS_NAME.loginwindow"
     defaults write "$LOGIN_PLIST" RunAtLoad -bool TRUE
-    defaults write "$LOGIN_PLIST" ProgramArguments -array \
-     "/Library/Application Support/Dialog/Dialog.app/Contents/MacOS/Dialog" "--ontop" \
+    defaults write "$LOGIN_PLIST" ProgramArguments -array "$C_DIALOG" "--ontop" \
      "--loginwindow" "--button1disabled" "--button1text" "none" "--jsonfile" "$TRACKER_JSON"
     chmod ugo+r "$LOGIN_PLIST"
     sleep 2
@@ -1028,7 +1036,7 @@ case $1 in
     fi
    done
    logIt "Collected: JAMF_ADMIN = $JAMF_ADMIN, LAPS_ADMIN = $LAPS_ADMIN"
-   if [ -z "$JAMF_ADMIN" ] || [ -z "$JAMF_GUID" ]; then
+   if [ "$JAMF_ADMIN" = "" ] || [ "$JAMF_GUID" = "" ]; then
     "$C_DIALOG" --ontop --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account username from Jamf Pro API"
     errorIt 2 "this should not have happened, unable to get Jamf Managed Account Details:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
    fi

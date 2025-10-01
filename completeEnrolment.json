@@ -45,7 +45,7 @@
   },
   "tempKeep": {
    "title": "Do we want keep or remove the Setup Administrator?",
-   "description": "The script will be default deleted the Temporary or Setup Administrator, enabling this will stop the account removal. Default is delete.",
+   "description": "The script will by default delete the Temporary or Setup Administrator, enabling this will stop the account removal. Default is delete (true).",
    "type": "boolean"
   },
   "lapsAdmin": {
