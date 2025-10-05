@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.08"
+VERSION="1.09"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -1326,6 +1326,8 @@ case $1 in
     track integer currentitem $(($( jq 'currentitem' )-1))
    fi
   fi
+  # remove Attempts/Passes from infobox
+  unset COUNT
 
   # MARK: Checking status
   trackNew "Checking Status"
@@ -1420,7 +1422,7 @@ case $1 in
    EMAIL_AUTH="${"$( defaultRead emailAUTH )":-"$EMAIL_FROM"}"
    logIt "Configured Email Details (if being sent):\nTo be sent via: $EMAIL_SMTP\nFrom: $EMAIL_FROM\nTo: $EMAIL_TO\nError: $EMAIL_ERR\nBCC: $EMAIL_BCC\nHidden by: $EMAIL_HIDDEN\nSubject: $EMAIL_SUBJECT\n\n$EMAIL_BODY\n"
 
-   EMAIL_BODY_ENCODED="$( echo "$EMAIL_BODY" | sed -E 's/ /\&nbsp;/g' | sed -E 's/=/\&#x3D;/g' )"
+   EMAIL_BODY_ENCODED="$( echo "$EMAIL_BODY" | sed -E 's/ /\&nbsp;/g' | sed -E 's/\<a\&nbsp;href/\<a href/g' | sed -E 's/=/\&#x3D;/g' )"
    
    if [ "$EMAIL_AUTH" != "" ] && [ "$( readSaved email )" != "" ] && [[ "$EMAIL_SMTP" = *":"* ]]; then
     if [ "$EMAIL_FROM" != "" ] && [ "$EMAIL_SUBJECT" != "" ]; then
