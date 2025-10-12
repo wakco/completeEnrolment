@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.09"
+VERSION="1.10"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -1385,6 +1385,7 @@ case $1 in
    EMAIL_BODY+="<b>On Network Interface:</b> $NETWORK_INTERFACE\n$( networksetup -listnetworkserviceorder | grep -B1 "$NETWORK_INTERFACE" )\n\n"
    EMAIL_BODY+="<b>Software:</b><br>\n<b>macOS Version:</b><br>\n$( sw_vers  | sed -E 's=^( *)(.*):(.*)$=<b>\2:</b>\3=' )\n"
    EMAIL_BODY+="<b>Script:</b> $0\n"
+   EMAIL_BODY+="<b>Script Version:</b> $VERSION\n"
    EMAIL_BODY+="<b>Enrollment Started:</b> $( jq startdate )\n"
    EMAIL_BODY+="<b>Last Restart:</b>  $( date -jr "$START_TIME" "+%d/%m/%Y %H:%M %Z" )\n"
    EMAIL_BODY+="<b>Estimated Finish:</b>  $( date -jr "$FINISH_TIME" "+%d/%m/%Y %H:%M %Z" )\n"
@@ -1422,7 +1423,10 @@ case $1 in
    EMAIL_AUTH="${"$( defaultRead emailAUTH )":-"$EMAIL_FROM"}"
    logIt "Configured Email Details (if being sent):\nTo be sent via: $EMAIL_SMTP\nFrom: $EMAIL_FROM\nTo: $EMAIL_TO\nError: $EMAIL_ERR\nBCC: $EMAIL_BCC\nHidden by: $EMAIL_HIDDEN\nSubject: $EMAIL_SUBJECT\n\n$EMAIL_BODY\n"
 
-   EMAIL_BODY_ENCODED="$( echo "$EMAIL_BODY" | sed -E 's/ /\&nbsp;/g' | sed -E 's/\<a\&nbsp;href/\<a href/g' | sed -E 's/=/\&#x3D;/g' )"
+   # To help with formatting, and mail client compatibility, html encode all spaces and equals,
+   #  except as part of an address tag, in which case restore the space, and the equals should be
+   #  quoted-printable encoded (=3D).
+   EMAIL_BODY_ENCODED="$( echo "$EMAIL_BODY" | sed -E 's/ /\&nbsp;/g' | sed -E 's/=/\&#x3D;/g' | sed -E 's/\<a\&nbsp;href\&#x3D;/\<a href=3D/g' )"
    
    if [ "$EMAIL_AUTH" != "" ] && [ "$( readSaved email )" != "" ] && [[ "$EMAIL_SMTP" = *":"* ]]; then
     if [ "$EMAIL_FROM" != "" ] && [ "$EMAIL_SUBJECT" != "" ]; then
