@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.12"
+VERSION="1.13"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -113,7 +113,9 @@ errorIt() {
 }
 
 defaultRead() {
- defaults read "$DEFAULTS_FILE" "$1" 2>/dev/null
+ defaultResult="$( defaults read "$DEFAULTS_FILE" "$1" 2>/dev/null )"
+ echo "$(date) - Reading Preference $1: $defaultResult" >> "$LOG_FILE"
+ echo "$defaultResult"
 }
 
 defaultReadBool() {
