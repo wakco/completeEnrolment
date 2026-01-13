@@ -1101,30 +1101,38 @@ case $1 in
    # MARK: Prepare Installs
 
    trackNew "Task List"
-   track update icon 'SF=checklist'
-   track update status pending
-   track update statustext "Loading..."
-   track update subtitle "Loading the task list(s) from config profile(s)"
-   track integer trackitem ${$( jq 'currentitem' ):--1}
-   
+   if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
+# need to track what has been done better
+    track update icon 'SF=checklist'
+    track update status pending
+    track update statustext "Loading..."
+    track update subtitle "Loading the task list(s) from config profile(s)"
+    track integer trackitem ${$( jq 'currentitem' ):--1}
 
-   runIt "plutil -convert json -o '$INSTALLS_JSON' '$DEFAULTS_FILE'"
+    runIt "plutil -convert json -o '$INSTALLS_JSON' '$DEFAULTS_FILE'"
+   fi
    THE_TITLE="${"$( /usr/bin/jq -Mr '.name // empty' "$INSTALLS_JSON" )":-"Main"}"
    trackNew "$THE_TITLE"
-   LIST_ICON="${"$( plutil -extract 'taskIcon' raw -o - "$INSTALLS_JSON" )":-"SF=doc.text"}"
-   track update icon "$LIST_ICON"
-   track update status wait
-   track update subtitle "$( /usr/bin/jq -Mr '.subtitle // empty' "$INSTALLS_JSON" )"
-   if [ "$( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )" = "" ]; then
-    runIt "plutil -insert listitem -array '$INSTALLS_JSON'"
+   if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
+    LIST_ICON="${"$( plutil -extract 'taskIcon' raw -o - "$INSTALLS_JSON" )":-"SF=doc.text"}"
+    track update icon "$LIST_ICON"
+    track update status wait
+    track update subtitle "$( /usr/bin/jq -Mr '.subtitle // empty' "$INSTALLS_JSON" )"
+    if [ "$( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )" = "" ]; then
+     runIt "plutil -insert listitem -array '$INSTALLS_JSON'"
+    fi
    fi
    if [ "$( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )" -gt 0 ]; then
-    track update statustext "Loaded"
-    track update status success
+    if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
+     track update statustext "Loaded"
+     track update status success
+    fi
     LIST_FILES="$( eval "ls '$DEFAULTS_BASE-'*" 2>/dev/null )"
     logIt "Additional Config Files to load: $LIST_FILES"
-    plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loading task list(s)..." "$TRACKER_JSON"
-    echo "listitem: index: $( jq 'trackitem' ), statustext: Loading task list(s)..." >> "$TRACKER_COMMAND"
+    if [ "$( jq 'listitem[.trackitem].status' )" != "success" ]; then
+     plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loading task list(s)..." "$TRACKER_JSON"
+     echo "listitem: index: $( jq 'trackitem' ), statustext: Loading task list(s)..." >> "$TRACKER_COMMAND"
+    fi
     sleep 0.1
     for LIST_FILE in ${(@f)LIST_FILES} ; do
      logIt "Reading Config File: $LIST_FILE"
@@ -1156,16 +1164,20 @@ case $1 in
       fi
      fi
     done
-    plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Config Profile(s) loaded. Loading Tasks..." "$TRACKER_JSON"
-    echo "listitem: index: $( jq 'trackitem' ), statustext: Config Profile(s) loaded. Loading Tasks..." >> "$TRACKER_COMMAND"
+    if [ "$( jq 'listitem[.trackitem].status' )" != "success" ]; then
+     plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Config Profile(s) loaded. Loading Tasks..." "$TRACKER_JSON"
+     echo "listitem: index: $( jq 'trackitem' ), statustext: Config Profile(s) loaded. Loading Tasks..." >> "$TRACKER_COMMAND"
+    fi
     sleep 1
     
     track integer startitem $(($( jq 'currentitem' )+1))
     
     # load software installs
-    track integer 'installCount' 0
-    plutil -replace listitem.$( jq 'trackitem' ).status -string "wait" "$TRACKER_JSON"
-    echo "listitem: index: $( jq 'trackitem' ), status: wait" >> "$TRACKER_COMMAND"
+    if [ "$( jq 'listitem[.trackitem].status' )" != "success" ]; then
+     track integer 'installCount' 0
+     plutil -replace listitem.$( jq 'trackitem' ).status -string "wait" "$TRACKER_JSON"
+     echo "listitem: index: $( jq 'trackitem' ), status: wait" >> "$TRACKER_COMMAND"
+    fi
     sleep 1
 
     infoBox
@@ -1237,38 +1249,40 @@ case $1 in
     done
     TASKSLOADING=""
 
-    plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Inserting Pause & Inventory Update..." "$TRACKER_JSON"
-    echo "listitem: index: $( jq 'trackitem' ), statustext: Inserting Pause & Inventory Update..." >> "$TRACKER_COMMAND"
-    sleep 1
+    if [ "$( jq 'listitem[.trackitem].status' )" != "success" ]; then
+     plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Inserting Pause & Inventory Update..." "$TRACKER_JSON"
+     echo "listitem: index: $( jq 'trackitem' ), statustext: Inserting Pause & Inventory Update..." >> "$TRACKER_COMMAND"
+     sleep 1
 
-    # MARK: Add Pause & Inventory
-    trackNew "Pause for 30 seconds"
-    if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
-     track update icon 'SF=pause.circle'
-     track update command "sleep 30"
-     track update commandtype none
-     track update subtitle "30 second pause for Managed & Self Service tasks"
-     track update successtype "pause"
-    fi
-    sleep 1
-    trackNew "Inventory Update"
-    if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
-     track update icon 'SF=list.bullet.rectangle'
-     track update command "'$C_JAMF' recon"
-     track update commandtype command
-     track update subtitle "Updates inventory once every $PER_APP minutes"
-     track update successtype "stamp"
-    fi
-    infoBox
+     # MARK: Add Pause & Inventory
+     trackNew "Pause for 30 seconds"
+     if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
+      track update icon 'SF=pause.circle'
+      track update command "sleep 30"
+      track update commandtype none
+      track update subtitle "30 second pause for Managed & Self Service tasks"
+      track update successtype "pause"
+     fi
+     sleep 1
+     trackNew "Inventory Update"
+     if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
+      track update icon 'SF=list.bullet.rectangle'
+      track update command "'$C_JAMF' recon"
+      track update commandtype command
+      track update subtitle "Updates inventory once every $PER_APP minutes"
+      track update successtype "stamp"
+     fi
+     infoBox
 
-    sleep 1
+     sleep 1
     
-    plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loaded" "$TRACKER_JSON"
-    echo "listitem: index: $( jq 'trackitem' ), statustext: Loaded" >> "$TRACKER_COMMAND"
-    sleep 0.1
-    plutil -replace listitem.$( jq 'trackitem' ).status -string "success" "$TRACKER_JSON"
-    echo "listitem: index: $( jq 'trackitem' ), status: success" >> "$TRACKER_COMMAND"
-    sleep 0.1
+     plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loaded" "$TRACKER_JSON"
+     echo "listitem: index: $( jq 'trackitem' ), statustext: Loaded" >> "$TRACKER_COMMAND"
+     sleep 0.1
+     plutil -replace listitem.$( jq 'trackitem' ).status -string "success" "$TRACKER_JSON"
+     echo "listitem: index: $( jq 'trackitem' ), status: success" >> "$TRACKER_COMMAND"
+     sleep 0.1
+    fi
     
     # MARK: Process software installs
     WAIT_TIME=$(($( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" )*$PER_APP*60))
