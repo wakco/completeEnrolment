@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.14"
+VERSION="1.15"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -1299,10 +1299,10 @@ case $1 in
     logIt "Number of Install tasks: $( jq 'installCount' )"
     # On first run, whether restarted or not, test to see if an task has already completed
     # Excludes the result test, as well as date, stamp, and pause
-    until [ "$SUCCESS_COUNT" -eq $( jq 'installCount' ) ] || [ $( date "+%s" ) -gt $FINISH_TIME ]; do
+    until [ "$SUCCESS_COUNT" -eq $( jq 'installCount' ) ] || [ $( date "+%s" ) -gt $FINISH_TIME ] || [ "$( jq 'listitem[.currentitem].title' )" = "Checking Status" ]; do
      track integer currentitem $( jq 'startitem' )
      SUCCESS_COUNT=0
-     until [ $( jq 'currentitem' ) -ge $( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" ) ]; do
+     until [ $( jq 'currentitem' ) -ge $( plutil -extract 'listitem' raw -o - "$TRACKER_JSON" ) ] || [ "$( jq 'listitem[.currentitem].title' )" = "Checking Status" ]; do
       logIt "Running Task $( jq 'currentitem' ), SUCCESS_COUNT = $SUCCESS_COUNT"
       infoBox
       if [ "$SUCCESS_COUNT" -eq $( jq 'installCount' ) ]; then
@@ -1508,7 +1508,7 @@ case $1 in
   fi
 
   # MARK: Connect identidy provider
-  #  or bind to active directory
+  #  such as binding to active directory, or setup first user
   trackNow "${"$( defaultRead policyADBindName )":-"Perform Last Steps"}" \
    policy "${"$( defaultRead policyADBind )":-"adBind"}" \
    result '' 'SF=person.text.rectangle'
