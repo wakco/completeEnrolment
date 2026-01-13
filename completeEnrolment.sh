@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.10"
+VERSION="1.11"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -1487,6 +1487,17 @@ case $1 in
    fi
   fi
 
+  # MARK: Connect identidy provider
+  #  or bind to active directory
+  trackNow "${"$( defaultRead policyADBindName )":-"Perform Last Steps"}" \
+   policy "${"$( defaultRead policyADBind )":-"adBind"}" \
+   result '' 'SF=person.text.rectangle'
+  
+  # MARK: One more recon
+  trackNow "Last Inventory Update" \
+   secure "'$C_JAMF' recon" "Updates inventory one last time" \
+   date '' 'SF=list.bullet.rectangle'
+  
   # MARK: Disable automatic login
   #  if our TEMP_ADMIN is still configured
   if [ "$( defaults read /Library/Preferences/com.apple.loginwindow.plist autoLoginUser 2>/dev/null )" = "$TEMP_ADMIN" ]; then
@@ -1500,17 +1511,6 @@ case $1 in
    fi
   fi
 
-  # MARK: Connect identidy provider
-  #  or bind to active directory
-  trackNow "${"$( defaultRead policyADBindName )":-"Perform Last Steps"}" \
-   policy "${"$( defaultRead policyADBind )":-"adBind"}" \
-   result '' 'SF=person.text.rectangle'
-  
-  # MARK: One more recon
-  trackNow "Last Inventory Update" \
-   secure "'$C_JAMF' recon" "Updates inventory one last time" \
-   date '' 'SF=list.bullet.rectangle'
-  
   # MARK: Shutdown Self Service
   if [ $FAILED_COUNT -eq 0 ]; then
    trackNow "Closing $SELF_SERVICE_NAME" \
