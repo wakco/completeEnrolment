@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.13"
+VERSION="1.14"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -113,6 +113,10 @@ errorIt() {
 }
 
 defaultRead() {
+ until [ -e "$DEFAULTS_FILE" ]; do
+  echo "$(date) - $DEFAULTS_FILE missing, waiting 30 seconds..." >> "$LOG_FILE"
+  sleep 30
+ done
  defaultResult="$( defaults read "$DEFAULTS_FILE" "$1" 2>/dev/null )"
  echo "$(date) - Reading Preference $1: $defaultResult" >> "$LOG_FILE"
  echo "$defaultResult"
