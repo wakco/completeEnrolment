@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.15"
+VERSION="1.16"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -1011,74 +1011,54 @@ case $1 in
   sleep 2
 
   # MARK: Add/update JAMF ADMIN
-  if [ "$( jq 'listitem[.currentitem+1].status' )" != "success" ]; then
-    
-   # skip this if the computer has been restarted...
-   
-   # finishing setting up admin accounts
-   # Add JSS ADMIN
-   # This will load the $JAMF_ADMIN and $JAMF_PASS login details
-   JAMF_AUTH_TOKEN="$( readJSON "$( curl -s --location --request POST "${JAMF_URL}api/oauth/token" \
-    --header 'Content-Type: application/x-www-form-urlencoded' \
-    --data-urlencode "client_id=$( readSaved apiId )" \
-    --data-urlencode 'grant_type=client_credentials' \
-    --data-urlencode "client_secret=$( readSaved apiSecret )" )" "access_token" )"
-   if [ "$JAMF_AUTH_TOKEN" = "" ]; then
-    "$C_DIALOG" --ontop --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to login to Jamf Pro API"
-    errorIt 2 "This should not have happened, are the API ID/Secret details correct?\nResponse from $JAMF_URL:\n$JAMF_AUTH_TOKEN"
-   fi
-   sleep 1
+  # finishing setting up admin accounts
+  # Add JSS ADMIN
+  # This will load the $JAMF_ADMIN and $JAMF_PASS login details
+  JAMF_AUTH_TOKEN="$( readJSON "$( curl -s --location --request POST "${JAMF_URL}api/oauth/token" \
+   --header 'Content-Type: application/x-www-form-urlencoded' \
+   --data-urlencode "client_id=$( readSaved apiId )" \
+   --data-urlencode 'grant_type=client_credentials' \
+   --data-urlencode "client_secret=$( readSaved apiSecret )" )" "access_token" )"
+  if [ "$JAMF_AUTH_TOKEN" = "" ]; then
+   "$C_DIALOG" --ontop --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to login to Jamf Pro API"
+   errorIt 2 "This should not have happened, are the API ID/Secret details correct?\nResponse from $JAMF_URL:\n$JAMF_AUTH_TOKEN"
+  fi
+  sleep 1
 
-   JAMF_ACCOUNTS="$( curl -s "${JAMF_URL}api/v2/local-admin-password/$( defaultRead managementID )/accounts" \
-    -H "accept: application/json" -H "Authorization: Bearer $JAMF_AUTH_TOKEN" )"
-   logIt "Checking for JMF account in:\n$JAMF_ACCOUNTS\n"
-   for (( i = 0; i < $( readJSON "$JAMF_ACCOUNTS" "totalCount" ); i++ )); do
-    if [ "$( readJSON "$JAMF_ACCOUNTS" "results[$i].userSource" )" = "JMF" ]; then
-     JAMF_ADMIN="$( readJSON "$JAMF_ACCOUNTS" "results[$i].username" )"
-     JAMF_GUID="$( readJSON "$JAMF_ACCOUNTS" "results[$i].guid" )"
-    fi
-    if [ "$( readJSON "$JAMF_ACCOUNTS" "results[$i].userSource" )" = "MDM" ]; then
-     LAPS_ADMIN="$( readJSON "$JAMF_ACCOUNTS" "results[$i].username" )"
-    fi
-   done
-   logIt "Collected: JAMF_ADMIN = $JAMF_ADMIN, LAPS_ADMIN = $LAPS_ADMIN"
-   if [ "$JAMF_ADMIN" = "" ] || [ "$JAMF_GUID" = "" ]; then
-    "$C_DIALOG" --ontop --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account username from Jamf Pro API"
-    errorIt 2 "this should not have happened, unable to get Jamf Managed Account Details:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
+  JAMF_ACCOUNTS="$( curl -s "${JAMF_URL}api/v2/local-admin-password/$( defaultRead managementID )/accounts" \
+   -H "accept: application/json" -H "Authorization: Bearer $JAMF_AUTH_TOKEN" )"
+  logIt "Checking for JMF account in:\n$JAMF_ACCOUNTS\n"
+  for (( i = 0; i < $( readJSON "$JAMF_ACCOUNTS" "totalCount" ); i++ )); do
+   if [ "$( readJSON "$JAMF_ACCOUNTS" "results[$i].userSource" )" = "JMF" ]; then
+    JAMF_ADMIN="$( readJSON "$JAMF_ACCOUNTS" "results[$i].username" )"
+    JAMF_GUID="$( readJSON "$JAMF_ACCOUNTS" "results[$i].guid" )"
    fi
-   sleep 1
+   if [ "$( readJSON "$JAMF_ACCOUNTS" "results[$i].userSource" )" = "MDM" ]; then
+    LAPS_ADMIN="$( readJSON "$JAMF_ACCOUNTS" "results[$i].username" )"
+   fi
+  done
+  logIt "Collected: JAMF_ADMIN = $JAMF_ADMIN, LAPS_ADMIN = $LAPS_ADMIN"
+  if [ "$JAMF_ADMIN" = "" ] || [ "$JAMF_GUID" = "" ]; then
+   "$C_DIALOG" --ontop --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account username from Jamf Pro API"
+   errorIt 2 "this should not have happened, unable to get Jamf Managed Account Details:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
+  fi
+  sleep 1
 
-   JAMF_PASS="$( readJSON "$( curl -s "${JAMF_URL}api/v2/local-admin-password/$( defaultRead managementID )/account/$JAMF_ADMIN/$JAMF_GUID/password" \
-    -H "accept: application/json" -H "Authorization: Bearer $JAMF_AUTH_TOKEN" )" "password" )"
-   if [ -z "$JAMF_PASS" ]; then
-    "$C_DIALOG" --ontop --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account password from Jamf Pro API"
-    errorIt 2 "this should not have happened, unable to get Jamf Managed Account Password:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
-   fi
-   track update jssname "$JAMF_ADMIN"
-  else
-   $JAMF_ADMIN="$( jq 'listitem[.currentitem+1].jssname' )"
+  JAMF_PASS="$( readJSON "$( curl -s "${JAMF_URL}api/v2/local-admin-password/$( defaultRead managementID )/account/$JAMF_ADMIN/$JAMF_GUID/password" \
+   -H "accept: application/json" -H "Authorization: Bearer $JAMF_AUTH_TOKEN" )" "password" )"
+  if [ -z "$JAMF_PASS" ]; then
+   "$C_DIALOG" --ontop --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account password from Jamf Pro API"
+   errorIt 2 "this should not have happened, unable to get Jamf Managed Account Password:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
   fi
 
   SECURE_ADMIN="$TEMP_ADMIN"
   SECURE_PASS="$( readSaved temp )"
 
   addAdmin "$JAMF_ADMIN" "$JAMF_PASS" "$JAMF_ADMIN Account" "Jamf Pro management" "$SECURE_ADMIN" "$SECURE_PASS"
-#  trackNow "$JAMF_ADMIN - Jamf Pro management account" \
-#   secure "'$C_MKUSER' --username $JAMF_ADMIN --password '$JAMF_PASS' --real-name '$JAMF_ADMIN Account' --home /private/var/$JAMF_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes --secure-token-admin-account-name '$TEMP_ADMIN' --secure-token-admin-password '$( readSaved temp )'" "Creating username $JAMF_ADMIN" \
-#   file "/private/var/$JAMF_ADMIN" 'SF=person.badge.plus'
-    
+
   # MARK: Add/update LAPS ADMIN
   addAdmin "$LAPS_ADMIN" "$( readSaved laps )" "$LAPS_NAME" "Local Administrator" "$SECURE_ADMIN" "$SECURE_PASS"
-#  OLD_LAPS_HOME="$( dscl . read "/Users/$LAPS_ADMIN" NFSHomeDirectory 2>/dev/null | cut -d ' ' -f 2- )"
-#  if [ "$OLD_LAPS_HOME" = "" ]; then
-#   trackNow "$LAPS_NAME - Local Administrator account" \
-#    secure "'$C_MKUSER' --username $LAPS_ADMIN --password '$( readSaved laps )' --real-name '$LAPS_NAME' --home /private/var/$LAPS_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes --secure-token-admin-account-name '$TEMP_ADMIN' --secure-token-admin-password '$( readSaved temp )'" "Creating username $LAPS_ADMIN" \
-    file "/private/var/$LAPS_ADMIN" 'SF=person.badge.plus'
-#  else
-#   trackNow "$LAPS_NAME - Local Administrator account" \
-#    secure "dscl . change '/Users/$LAPS_ADMIN' NFSHomeDirectory '$OLD_LAPS_HOME' '/private/var/$LAPS_ADMIN' ; mv '$OLD_LAPS_HOME' '/private/var/$LAPS_ADMIN' ; sysadminctl -secureTokenOn '"$LAPS_ADMIN"' -password '$( readSaved laps )' -adminUser '$TEMP_ADMIN' -adminPassword '$( readSaved temp )'" "Moving and securing $LAPS_ADMIN"\
-#    result '' 'SF=person.badge.plus'
-#  fi
+
   unset SECURE_ADMIN
   unset SECURE_PASS
   
