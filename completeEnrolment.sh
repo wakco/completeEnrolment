@@ -1,7 +1,8 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.19"
+VERSION="1.20"
+SCRIPTNAME="$( basename "$0" )"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -210,7 +211,7 @@ infoAdd() {
 }
 infoBox() {
  INFOBOX=""
- infoAdd "$( basename $0 ) v$VERSION"
+ infoAdd "$SCRIPTNAME v$VERSION"
  infoAdd "**macOS $( sw_vers -productversion )** on  <br>$( scutil --get ComputerName )"
  if [ "$( jq 'startdate' )" != "" ]; then
   infoAdd "**Started:**  <br>$( jq startdate )"
