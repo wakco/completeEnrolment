@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.18"
+VERSION="1.19"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -105,7 +105,7 @@ LOG_FILE="$LIB/Logs/$DEFAULTS_NAME-$( if [ "$1" = "/" ]; then echo "Jamf" ; else
 logIt() {
  echo "$(date) - $@" 2>&1 | tee -a "$LOG_FILE"
 }
-logIt "###################### completeEnrolment $VERSION started with $1."
+logIt "###################### completeEnrolment $VERSION started with $1, and $( whoLogged ) is the current console user"
 
 errorIt() {
  logIt "$2" >&2
@@ -115,14 +115,16 @@ errorIt() {
 }
 
 defaultRead() {
- local MYPERAPP=${"$PER_APP":-"5"}
- until [ -e "$DEFAULTS_FILE" ] || [ $MYPERAPP = 0 ]; do
-  echo "$(date) - $DEFAULTS_FILE missing, waiting 30 seconds..." >> "$LOG_FILE"
-  sleep 30
-  ((MYPERAPP--))
+ local myAttempts=1
+ local defaultResult=""
+ while [ "$defaultResult" = "" ] && [ $myAttempts -lt 11 ]; do
+  defaultResult="$( defaults read "$DEFAULTS_FILE" "$1" 2>/dev/null )"
+  echo "$(date) - (Attempt #$myAttempts) Reading Preference $1: $defaultResult" >> "$LOG_FILE"
+  if [ "$defaultResult" = "" ]; then
+   sleep 30
+   ((myAttempts++))
+  fi
  done
- defaultResult="$( defaults read "$DEFAULTS_FILE" "$1" 2>/dev/null )"
- echo "$(date) - Reading Preference $1: $defaultResult" >> "$LOG_FILE"
  echo "$defaultResult"
 }
 
@@ -699,17 +701,15 @@ case $1 in
   fi
   
   # MARK: Install initial files
-  INSTALL_POLICY="${"$( defaultRead policyInitialFiles )":-"installInitialFiles"}"
   trackNow "Installing Initial Files" \
-   policy "$INSTALL_POLICY" \
+   policy "${"$( defaultRead policyInitialFiles )":-"installInitialFiles"}" \
    file "$DIALOG_ICON" 'SF=square.and.arrow.down.on.square'
 
   # MARK: Install Installomator
   # This can be either the custom version from this repository, or the script that installs the
   # official version.
-  INSTALL_POLICY="${"$( defaultRead policyInstallomator )":-"installInstallomator"}"
   trackNow "Installing Installomator" \
-   policy "$INSTALL_POLICY" \
+   policy "${"$( defaultRead policyInstallomator )":-"installInstallomator"}" \
    file "/usr/local/Installomator/Installomator.sh" 'SF=square.and.arrow.down.badge.checkmark'
   
   # MARK: Install swiftDialog
@@ -860,10 +860,9 @@ case $1 in
     fi
 
     # MARK: Set the Computer Name
-    INSTALL_POLICY="${"$( defaultRead policyComputerName )":-"fixComputerName"}"
     COMPUTER_NAME="$( scutil --get ComputerName )"
     trackNow "Setting computer name" \
-     policy "$INSTALL_POLICY" \
+     policy "${"$( defaultRead policyComputerName )":-"fixComputerName"}" \
      test '[ "$COMPUTER_NAME" != "$( scutil --get ComputerName )" ]' 'SF=lock.desktopcomputer'
     infoBox
     
