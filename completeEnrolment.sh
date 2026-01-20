@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.16"
+VERSION="1.18"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -52,11 +52,13 @@ fi
 # identify an ADE/DEP Jamf PreStage Enrollment (after confirming the script was started by Jamf Pro
 # with a / in $1).
 
-if [ "$( who | grep console | wc -l )" -gt 1 ]; then
- WHO_LOGGED="$( who | grep -v mbsetupuser | grep -m1 console | cut -d " " -f 1 )"
-else
- WHO_LOGGED="$( who | grep -m1 console | cut -d " " -f 1 )"
-fi
+whoLogged() {
+ if [ "$( who | grep console | wc -l )" -gt 1 ]; then
+  echo "$( who | grep -v mbsetupuser | grep -m1 console | cut -d " " -f 1 )"
+ else
+   echo "$( who | grep -m1 console | cut -d " " -f 1 )"
+ fi
+}
 
 # so we can use ^ for everything other than this matches in case statements
 setopt extended_glob
@@ -96,7 +98,7 @@ fi
 
 # This will Generate a number of log files based on the task and when they started.
 
-LOG_FILE="$LIB/Logs/$DEFAULTS_NAME-$( if [ "$1" = "/" ]; then echo "Jamf" ; else echo "$1" ; fi )-$WHO_LOGGED-$( date "+%Y-%m-%d %H-%M-%S %Z" ).log"
+LOG_FILE="$LIB/Logs/$DEFAULTS_NAME-$( if [ "$1" = "/" ]; then echo "Jamf" ; else echo "$1" ; fi )-$( whoLogged )-$( date "+%Y-%m-%d %H-%M-%S %Z" ).log"
 
 # MARK: Functions
 
@@ -113,9 +115,11 @@ errorIt() {
 }
 
 defaultRead() {
- until [ -e "$DEFAULTS_FILE" ]; do
+ local MYPERAPP=${"$PER_APP":-"5"}
+ until [ -e "$DEFAULTS_FILE" ] || [ $MYPERAPP = 0 ]; do
   echo "$(date) - $DEFAULTS_FILE missing, waiting 30 seconds..." >> "$LOG_FILE"
   sleep 30
+  ((MYPERAPP--))
  done
  defaultResult="$( defaults read "$DEFAULTS_FILE" "$1" 2>/dev/null )"
  echo "$(date) - Reading Preference $1: $defaultResult" >> "$LOG_FILE"
@@ -199,44 +203,49 @@ subtitleType() {
 }
 
 # MARK: infoBox
+infoAdd() {
+ INFOBOX+="$1  <br><br>"
+}
 infoBox() {
- INFOBOX="**macOS $( sw_vers -productversion )** on  <br>$( scutil --get ComputerName )  <br><br>"
+ INFOBOX=""
+ infoAdd "$( basename $0 ) v$VERSION"
+ infoAdd "**macOS $( sw_vers -productversion )** on  <br>$( scutil --get ComputerName )"
  if [ "$( jq 'startdate' )" != "" ]; then
-  INFOBOX+="**Started:**  <br>$( jq startdate )  <br><br>"
+  infoAdd "**Started:**  <br>$( jq startdate )"
  fi
  if [ "$START_TIME" != "" ]; then
-  INFOBOX+="**Last Restarted:**  <br>$( date -jr "$START_TIME" "+%d/%m/%Y %H:%M %Z" )  <br><br>"
+  infoAdd "**Last Restarted:**  <br>$( date -jr "$START_TIME" "+%d/%m/%Y %H:%M %Z" )"
  fi
  if [ "$FINISH_TIME" != "" ]; then
-  INFOBOX+="**Estimated Finish:**  <br>$( date -jr "$FINISH_TIME" "+%d/%m/%Y %H:%M %Z" )  <br><br>"
+  infoAdd "**Estimated Finish:**  <br>$( date -jr "$FINISH_TIME" "+%d/%m/%Y %H:%M %Z" )"
  fi
  if [ "$FINISHED" != "" ]; then
-  INFOBOX+="**Finished at:**  <br>$( date -jr "$FINISHED" "+%d/%m/%Y %H:%M %Z" )  <br><br>"
+  infoAdd "**Finished at:**  <br>$( date -jr "$FINISHED" "+%d/%m/%Y %H:%M %Z" )"
  fi
- INFOBOX+="**Total Tasks:** $( plutil -extract listitem raw -o - "$TRACKER_JSON" )  <br><br>"
+ infoAdd "**Total Tasks:** $( plutil -extract listitem raw -o - "$TRACKER_JSON" )"
  if [ "$1" != "done" ]; then
   if [ "$TASKSLOADING" != "" ]; then
-   INFOBOX+="$TASKSLOADING  <br><br>"
+   infoAdd "$TASKSLOADING"
   fi
-  INFOBOX+="**Current Task:** $(($( jq 'currentitem' )+1))  <br>$( jq 'listitem[.currentitem].title' )  <br><br>"
+  infoAdd "**Current Task:** $(($( jq 'currentitem' )+1))  <br>$( jq 'listitem[.currentitem].title' )"
  fi
  if [ "$COUNT" != "" ]; then
-  INFOBOX+="**Attempts/Passes:** $COUNT  <br><br>"
+  infoAdd "**Attempts/Passes:** $COUNT"
  fi
  if [ "$( jq 'installCount' )" != "" ]; then
-  INFOBOX+="**Install Tasks:** $( jq 'installCount' )  <br><br>"
+  infoAdd "**Install Tasks:** $( jq 'installCount' )"
  fi
  if [ "$SUCCESS_COUNT" != "" ]; then
   if [ "$INFO_SUCCESS_COUNT" = "" ] || [ $SUCCESS_COUNT -gt $INFO_SUCCESS_COUNT ]; then
    INFO_SUCCESS_COUNT=$SUCCESS_COUNT
   fi
-  INFOBOX+="**Installed:** $INFO_SUCCESS_COUNT  <br><br>"
+  infoAdd "**Installed:** $INFO_SUCCESS_COUNT"
  fi
   if [ "$FAILED_COUNT" != "" ] && [ $FAILED_COUNT -gt 0 ]; then
-  INFOBOX+="**Failed:** $FAILED_COUNT  <br><br>"
+  infoAdd "**Failed:** $FAILED_COUNT"
  fi
  if [ "$FULLSUCCESS_COUNT" != "" ]; then
-  INFOBOX+="**Completed Tasks:** $FULLSUCCESS_COUNT  <br><br>"
+  infoAdd "**Completed Tasks:** $FULLSUCCESS_COUNT"
  fi
  track string infobox "$INFOBOX"
  plutil -replace infobox -string "$INFOBOX" "$LOG_JSON"
@@ -435,7 +444,7 @@ trackIt() {
   selfservice)
    if [ "$( jq 'listitem[.currentitem].lastattempt' )" = "" ] || [ $( date "+%s" ) -ge $(($( jq 'listitem[.currentitem].lastattempt' )+$PER_APP*$PER_APP*60)) ]; then
     track update statustext "Asking Self Service to execute..."
-    runIt "launchctl asuser $( id -u $WHO_LOGGED ) open -j -g -a '$SELF_SERVICE' -u '$2'"
+    runIt "launchctl asuser $( id -u $( whoLogged ) ) open -j -g -a '$SELF_SERVICE' -u '$2'"
     track update lastattempt "$( date "+%s" )"
    else
     track update statustext "Waiting for 'Self Service' to execute..."
@@ -538,7 +547,7 @@ addAdmin() {
  if [ "$THE_ADMIN" != "" ]; then
   MKUSER_OPTIONS+=" --secure-token-admin-account-name '$THE_ADMIN' --secure-token-admin-password '$THE_PASS'"
  fi
- if [ "$WHO_LOGGED" = "$1" ]; then
+ if [ "$( whoLogged )" = "$1" ]; then
   trackNow "Resetting password for account $4" \
    secure "sysadminctl -resetPasswordFor '$1' -newPassword '$2' -adminUser '$THE_ADMIN' -adminPassword '$THE_PASS'" "Resetting the password for $1" \
    result '' 'SF=person.fill.checkmark'
@@ -575,6 +584,7 @@ done
 
 # MARK: Load common settings
 
+PER_APP=${"$( defaultRead perAPP )":-"5"}
 DIALOG_ICON="${"$( defaultRead dialogIcon )":-"caution"}"
 ADMIN_ICON="${"$( defaultRead adminPicture )":-"--no-picture"}"
 if [ "$ADMIN_ICON" != "--no-picture" ]; then
@@ -593,8 +603,6 @@ TEMP_ADMIN="${"$( defaultRead tempAdmin )":-"setup_admin"}"
 TEMP_NAME="${"$( defaultRead tempName )":-"Setup Admin"}"
 LAPS_ADMIN="${"$( defaultRead lapsAdmin )":-"laps_admin"}"
 LAPS_NAME="${"$( defaultRead lapsName )":-"LAPS Admin"}"
-PER_APP=${"$( defaultRead perAPP )":-"5"}
-
 
 case $1 in
  # MARK: Jamf Enrolment
@@ -625,7 +633,7 @@ case $1 in
   fi
   settingsPlist write laps -string "$LAPS_PASS"
   if [ "$7" = "" ] || [ "$8" = "" ]; then
-   if [ "$WHO_LOGGED" != "_mbsetupuser" ]; then
+   if [ "$( whoLogged )" != "_mbsetupuser" ]; then
     "$C_DIALOG" --ontop --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: missing Jamf Pro API login details"
    fi
    errorIt 2 "API details are required for access to the \$JAMF_ADMIN password, the following was supplied:\nAPI ID: $7\nAPI Secret: $8"
@@ -717,7 +725,7 @@ case $1 in
   # email, and API passwords). This is to allow for hopefully a more secure process, but limiting
   # the access to some of the information to say only during the first 24 hours (at least coming
   # from Jamf Pro that way).
-  case $WHO_LOGGED in
+  case $( whoLogged ) in
    # MARK: Prestage Enrolment
    _mbsetupuser)
     # Get setup quickly and start atLoginWindow for initial step tracking followed by a restart.
@@ -977,23 +985,15 @@ case $1 in
   while [ "$( pgrep "Finder" )" = "" ]; do
    sleep 1
   done
-  
-  # MARK: Whose logged in?
-  # reset WHO_LOGGED as starting before the Finder may have collecting the wrong information
-  if [ "$( who | grep console | wc -l )" -gt 1 ]; then
-   WHO_LOGGED="$( who | grep -v mbsetupuser | grep -m1 console | cut -d " " -f 1 )"
-  else
-   WHO_LOGGED="$( who | grep -m1 console | cut -d " " -f 1 )"
-  fi
-  
+    
   sleep 2
   
   # MARK: Close Finder & Dock
-  #  if we just started up (i.e. if WHO_LOGGED = TEMP_ADMIN)
-  if [ "$WHO_LOGGED" = "$TEMP_ADMIN" ]; then
+  #  if we just started up (i.e. if whoLogged = TEMP_ADMIN)
+  if [ "$( whoLogged )" = "$TEMP_ADMIN" ]; then
    track update status success
-   launchctl bootout gui/$( id -u $WHO_LOGGED )/com.apple.Dock.agent
-   launchctl bootout gui/$( id -u $WHO_LOGGED )/com.apple.Finder
+   launchctl bootout gui/$( id -u $( whoLogged ) )/com.apple.Dock.agent
+   launchctl bootout gui/$( id -u $( whoLogged ) )/com.apple.Finder
    sleep 2
   fi
   
@@ -1006,7 +1006,7 @@ case $1 in
   # MARK: Start Self Service
   SELF_SERVICE_NAME="$( echo "$SELF_SERVICE" | sed -E 's=.*/(.*)\.app$=\1=' )"
   trackNow "Opening $SELF_SERVICE_NAME" \
-   secure "launchctl asuser $( id -u $WHO_LOGGED ) open -j -g -a '$SELF_SERVICE' ; sleep 5" "$SELF_SERVICE_NAME may be required for some installs" \
+   secure "launchctl asuser $( id -u $( whoLogged ) ) open -j -g -a '$SELF_SERVICE' ; sleep 5" "$SELF_SERVICE_NAME may be required for some installs" \
    test "[ \"\$( pgrep 'Self Servic(e|e\\+)\$' )\" != '' ]" 'SF=square.and.arrow.down.badge.checkmark'
   sleep 2
 
@@ -1514,13 +1514,13 @@ case $1 in
   # MARK: Shutdown Self Service
   if [ $FAILED_COUNT -eq 0 ]; then
    trackNow "Closing $SELF_SERVICE_NAME" \
-    secure "launchctl asuser $( id -u $WHO_LOGGED ) osascript -e 'tell app \"$SELF_SERVICE_NAME\" to quit' ; sleep 5" "$SELF_SERVICE_NAME is no longer needed as Installs have completed" \
+    secure "launchctl asuser $( id -u $( whoLogged ) ) osascript -e 'tell app \"$SELF_SERVICE_NAME\" to quit' ; sleep 5" "$SELF_SERVICE_NAME is no longer needed as Installs have completed" \
     test "[ \"\$( pgrep 'Self Servic(e|e\\+)\$' )\" = '' ]" 'SF=square.and.arrow.down.badge.checkmark'
   fi
 
   # MARK: Wait for user
   infoBox done
-  if [ "$( pgrep 'Migration Assistant' )" = "" ] && [ "$WHO_LOGGED" = "$TEMP_ADMIN" ] && [ $FAILED_COUNT -eq 0 ]; then
+  if [ "$( pgrep 'Migration Assistant' )" = "" ] && [ "$( whoLogged )" = "$TEMP_ADMIN" ] && [ $FAILED_COUNT -eq 0 ]; then
    echo "button1text: Restart Now" >> "$TRACKER_COMMAND"
   elif [ "$( pgrep 'Migration Assistant' )" != "" ]; then
    echo "button1text: Migration Assistant..." >> "$TRACKER_COMMAND"
@@ -1529,21 +1529,20 @@ case $1 in
   fi
   sleep 0.1
   echo "end:" >> "$TRACKER_COMMAND"
-  
+
   # MARK: Wait for dialog to close
   #  So as not to let macOS close it unintentionally
   until [ "$( pgrep "Dialog" )" = "" ]; do
    sleep 1
   done
   
-  if [ "$( pgrep 'Migration Assistant' )" = "" ] && [ "$WHO_LOGGED" = "$TEMP_ADMIN" ] && [ $FAILED_COUNT -eq 0 ]; then
+  if [ "$( pgrep 'Migration Assistant' )" = "" ] && [ "$( whoLogged )" = "$TEMP_ADMIN" ] && [ $FAILED_COUNT -eq 0 ]; then
    shutdown -r now
   fi
  ;;
  # MARK: Clean up
  cleanUp)
   # A clean up routine
-  TEMP_ADMIN="${"$( defaultRead tempAdmin )":-"setup_admin"}"
   if ${$( defaultReadBool tempKeep ):-false}; then
    logIt "Keeping $TEMP_ADMIN as requested."
   else
@@ -1562,7 +1561,7 @@ case $1 in
  # MARK: Default behaviour, clean up or process
  *)
   logIt "TEMP_ADMIN = $TEMP_ADMIN"
-  logIt "WHO_LOGGED = $WHO_LOGGED"
+  logIt "whoLogged = $( whoLogged )"
   runIt "defaults read /Library/Preferences/com.apple.loginwindow.plist autoLoginUser 2>/dev/null"
   if [ "$( defaults read /Library/Preferences/com.apple.loginwindow.plist autoLoginUser 2>/dev/null )" = "$TEMP_ADMIN" ]; then
    runIt "'$C_ENROLMENT' process >> /dev/null 2>&1"
