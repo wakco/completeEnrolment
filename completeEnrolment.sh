@@ -1,8 +1,9 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.20"
+VERSION="1.21"
 SCRIPTNAME="$( basename "$0" )"
+SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -121,9 +122,9 @@ defaultRead() {
  while [ "$defaultResult" = "" ] && [ $myAttempts -lt 11 ]; do
   defaultResult="$( defaults read "$DEFAULTS_FILE" "$1" 2>/dev/null )"
   echo "$(date) - (Attempt #$myAttempts) Reading Preference $1: $defaultResult" >> "$LOG_FILE"
-  if [ "$defaultResult" = "" ]; then
+  ((myAttempts++))
+  if [ "$defaultResult" = "" ] && [ $myAttempts -lt 11 ]; then
    sleep 30
-   ((myAttempts++))
   fi
  done
  echo "$defaultResult"
@@ -212,7 +213,7 @@ infoAdd() {
 infoBox() {
  INFOBOX=""
  infoAdd "$SCRIPTNAME v$VERSION"
- infoAdd "**macOS $( sw_vers -productversion )** on  <br>$( scutil --get ComputerName )"
+ infoAdd "**macOS $( sw_vers -productversion )** on  <br>$( scutil --get ComputerName )  <br>(S/N: $SERIALNUMBER)"
  if [ "$( jq 'startdate' )" != "" ]; then
   infoAdd "**Started:**  <br>$( jq startdate )"
  fi
