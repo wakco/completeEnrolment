@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.21"
+VERSION="1.22"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -850,7 +850,7 @@ case $1 in
     #  (if bound)
     if [ "$( ls /Library/Preferences/OpenDirectory/Configurations/Active\ Directory | wc -l )" -gt 0 ]; then
      POLICY_UNBIND="$( defaultRead policyADUnbind )"
-     if [ "$POLICY_UNBIND" = "" ]; then
+     if [ "$POLICY_UNBIND" = "" ] || [ "$POLICY_UNBIND" = "force" ]; then
       COMMAND="command"
       POLICY_UNBIND="/usr/sbin/dsconfigad -leave -force"
      else
@@ -881,9 +881,7 @@ case $1 in
     
     # MARK: Add our TEMP_ADMIN
     addAdmin "$TEMP_ADMIN" "$( readSaved temp )" "$TEMP_NAME" "Initial Setup" "$SECURE_ADMIN" "$SECURE_PASS" "--automatic-login"
-#    trackNow "$TEMP_NAME - Initial Setup account" \
-#     secure "'$C_MKUSER' --username '$TEMP_ADMIN' --password '$( readSaved temp )' --real-name '$TEMP_NAME' --home /Users/$TEMP_ADMIN --hidden userOnly --skip-setup-assistant firstLoginOnly --automatic-login --no-picture --administrator --do-not-confirm --do-not-share-public-folder --prohibit-user-password-changes --prohibit-user-picture-changes $MKUSER_OPTIONS" "Creating username $TEMP_ADMIN with mkuser" \
-#     file "/Users/$TEMP_ADMIN" 'SF=person.badge.plus'
+    
     unset SECURE_ADMIN
     unset SECURE_PASS
     
@@ -898,7 +896,7 @@ case $1 in
     runIt "sudo -u '$TEMP_ADMIN' defaults write '/Users/$TEMP_ADMIN/Library/Preferences/com.jamfsoftware.selfserviceplus.plist' 'com.jamfsoftware.selfservice.onboardingcomplete' -bool TRUE"
     runIt "chown '$TEMP_ADMIN' /Users/$TEMP_ADMIN/Library/Preferences/com.jamfsoftware.selfservice*"
    ;|
-   
+
    _mbsetupuser)
     # MARK: Restart
     #  and record it as a task
@@ -909,9 +907,9 @@ case $1 in
     sleep 5
     rm -rf "$LOGIN_PLIST" "$TRACKER_RUNNING"
    ;;
+
    *)
     # MARK: Escrow BootStrap Token
-    #  Track this?
     logIt "Escrowing BootStrap Token - required for manual enrolments and re-enrolments."
     EXPECT_SCRIPT="expect -c \""
     EXPECT_SCRIPT+="spawn profiles install -type bootstraptoken ;"
