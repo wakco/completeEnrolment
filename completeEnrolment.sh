@@ -1554,23 +1554,21 @@ case $1 in
    *)
     rm -f "$COMMAND_FILE"
    ;|
-   ^0)
+   0)
+    logIt "Restarting..."
+    shutdown -r now
+   ;;
+   *)
     logIt "Removing the blurscreen"
     echo "blurscreen: disable" >> "$TRACKER_COMMAND"
     sleep 0.1
    ;|
-   0|2)
+   2)
     logIt "Closing the log viewer/task list"
     echo "end:" >> "$TRACKER_COMMAND"
     until [ "$( pgrep "Dialog" )" = "" ]; do
      sleep 1
     done
-   ;|
-   0)
-    logIt "Restarting..."
-    shutdown -r now
-   ;;
-   2)
     logIt "Opening Migration Assistant"
     launchctl asuser $( id -u $( whoLogged ) ) /usr/bin/open /System/Applications/Utilities/Migration\ Assistant.app
    ;;
