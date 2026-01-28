@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.22"
+VERSION="1.23"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -42,10 +42,6 @@ mkdir -p "$CACHE"
 CLEANUP_FILES+=( "$CACHE" )
 JAMF_URL="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist jss_url )"
 JAMF_SERVER="$( echo "$JAMF_URL" | awk -F '(/|:)' '{ print $4 }' )"
-SELF_SERVICE="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist self_service_plus_path 2>/dev/null )"
-if [ "$SELF_SERVICE" = "" ]; then
- SELF_SERVICE="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist self_service_app_path 2>/dev/null )"
-fi
 
 # MARK: Whose logged in
 
@@ -103,6 +99,16 @@ fi
 LOG_FILE="$LIB/Logs/$DEFAULTS_NAME-$( if [ "$1" = "/" ]; then echo "Jamf" ; else echo "$1" ; fi )-$( whoLogged )-$( date "+%Y-%m-%d %H-%M-%S %Z" ).log"
 
 # MARK: Functions
+
+selfService() {
+# The following should work, however in the 11.25.0 beta the self_service_plus_path setting contains the non-plus name ?!?
+# SELF_SERVICE="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist self_service_plus_path 2>/dev/null )"
+# if [ "$SELF_SERVICE" = "" ]; then
+#  SELF_SERVICE="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist self_service_app_path 2>/dev/null )"
+# fi
+# So instead, lets just use the first version of Self Service that appears in the Applications folder.
+ ls -d /Applications/* | grep -m1 "Self Service"
+}
 
 logIt() {
  echo "$(date) - $@" 2>&1 | tee -a "$LOG_FILE"
@@ -210,23 +216,31 @@ subtitleType() {
 infoAdd() {
  INFOBOX+="$1  <br><br>"
 }
+helpAdd() {
+ HELPBOX+="$1  <br><br>"
+}
+bothAdd() {
+ infoAdd "$1"
+ helpAdd "$( echo "$1" | sed 's/\ <br>//g' )"
+}
 infoBox() {
  INFOBOX=""
- infoAdd "$SCRIPTNAME v$VERSION"
- infoAdd "**macOS $( sw_vers -productversion )** on  <br>$( scutil --get ComputerName )  <br>(S/N: $SERIALNUMBER)"
+ HELPBOX=""
+ helpAdd "$SCRIPTNAME v$VERSION"
+ bothAdd "**macOS $( sw_vers -productversion )** on  <br>$( scutil --get ComputerName )  <br>(S/N: $SERIALNUMBER)"
  if [ "$( jq 'startdate' )" != "" ]; then
-  infoAdd "**Started:**  <br>$( jq startdate )"
+  bothAdd "**Started:**  <br>$( jq startdate )"
  fi
  if [ "$START_TIME" != "" ]; then
   infoAdd "**Last Restarted:**  <br>$( date -jr "$START_TIME" "+%d/%m/%Y %H:%M %Z" )"
  fi
  if [ "$FINISH_TIME" != "" ]; then
-  infoAdd "**Estimated Finish:**  <br>$( date -jr "$FINISH_TIME" "+%d/%m/%Y %H:%M %Z" )"
+  bothAdd "**Estimated Finish:**  <br>$( date -jr "$FINISH_TIME" "+%d/%m/%Y %H:%M %Z" )"
  fi
  if [ "$FINISHED" != "" ]; then
-  infoAdd "**Finished at:**  <br>$( date -jr "$FINISHED" "+%d/%m/%Y %H:%M %Z" )"
+  bothAdd "**Finished at:**  <br>$( date -jr "$FINISHED" "+%d/%m/%Y %H:%M %Z" )"
  fi
- infoAdd "**Total Tasks:** $( plutil -extract listitem raw -o - "$TRACKER_JSON" )"
+ bothAdd "**Total Tasks:** $( plutil -extract listitem raw -o - "$TRACKER_JSON" )"
  if [ "$1" != "done" ]; then
   if [ "$TASKSLOADING" != "" ]; then
    infoAdd "$TASKSLOADING"
@@ -246,18 +260,23 @@ infoBox() {
   infoAdd "**Installed:** $INFO_SUCCESS_COUNT"
  fi
   if [ "$FAILED_COUNT" != "" ] && [ $FAILED_COUNT -gt 0 ]; then
-  infoAdd "**Failed:** $FAILED_COUNT"
+  bothAdd "**Failed:** $FAILED_COUNT"
  fi
  if [ "$FULLSUCCESS_COUNT" != "" ]; then
-  infoAdd "**Completed Tasks:** $FULLSUCCESS_COUNT"
+  bothAdd "**Completed Tasks:** $FULLSUCCESS_COUNT"
  fi
  track string infobox "$INFOBOX"
+ track string helpmessage "$HELPBOX"
  plutil -replace infobox -string "$INFOBOX" "$LOG_JSON"
+ plutil -replace helpmessage -string "$HELPBOX" "$LOG_JSON"
  if [ ! -e "$TRACKER_RUNNING" ]; then
   echo "infobox: $INFOBOX" >> "$TRACKER_COMMAND"
   sleep 0.1
+  echo "helpmessage: $HELPBOX" >> "$TRACKER_COMMAND"
+  sleep 0.1
  fi
- logIt "$INFOBOX"
+ logIt "=== Infobox:\n$INFOBOX"
+ logIt "=== Help Message:\n$HELPBOX"
 }
 
 # MARK: track
@@ -448,7 +467,7 @@ trackIt() {
   selfservice)
    if [ "$( jq 'listitem[.currentitem].lastattempt' )" = "" ] || [ $( date "+%s" ) -ge $(($( jq 'listitem[.currentitem].lastattempt' )+$PER_APP*$PER_APP*60)) ]; then
     track update statustext "Asking Self Service to execute..."
-    runIt "launchctl asuser $( id -u $( whoLogged ) ) open -j -g -a '$SELF_SERVICE' -u '$2'"
+    runIt "launchctl asuser $( id -u $( whoLogged ) ) open -j -g -a '$( selfService )' -u '$2'"
     track update lastattempt "$( date "+%s" )"
    else
     track update statustext "Waiting for 'Self Service' to execute..."
@@ -980,8 +999,8 @@ case $1 in
    track integer currentitem $( jq 'processStart' )
   fi
 
-  # MARK: Wait for Finder
-  while [ "$( pgrep "Finder" )" = "" ]; do
+  # MARK: Wait for Finder & Dock
+  while [ "$( pgrep "Finder" )" = "" ] && [ "$( pgrep "Dock" )" = "" ]; do
    sleep 1
   done
     
@@ -1003,9 +1022,9 @@ case $1 in
   sleep 2
   
   # MARK: Start Self Service
-  SELF_SERVICE_NAME="$( echo "$SELF_SERVICE" | sed -E 's=.*/(.*)\.app$=\1=' )"
+  SELF_SERVICE_NAME="$( echo "$( selfService )" | sed -E 's=.*/(.*)\.app$=\1=' )"
   trackNow "Opening $SELF_SERVICE_NAME" \
-   secure "launchctl asuser $( id -u $( whoLogged ) ) open -j -g -a '$SELF_SERVICE' ; sleep 5" "$SELF_SERVICE_NAME may be required for some installs" \
+   secure "launchctl asuser $( id -u $( whoLogged ) ) open -j -g -a '$( selfService )' ; sleep 5" "$SELF_SERVICE_NAME may be required for some installs" \
    test "[ \"\$( pgrep 'Self Servic(e|e\\+)\$' )\" != '' ]" 'SF=square.and.arrow.down.badge.checkmark'
   sleep 2
 
@@ -1517,27 +1536,62 @@ case $1 in
     test "[ \"\$( pgrep 'Self Servic(e|e\\+)\$' )\" = '' ]" 'SF=square.and.arrow.down.badge.checkmark'
   fi
 
-  # MARK: Wait for user
+  # MARK: Finished, what now?
   infoBox done
-  if [ "$( pgrep 'Migration Assistant' )" = "" ] && [ "$( whoLogged )" = "$TEMP_ADMIN" ] && [ $FAILED_COUNT -eq 0 ]; then
-   echo "button1text: Restart Now" >> "$TRACKER_COMMAND"
-  elif [ "$( pgrep 'Migration Assistant' )" != "" ]; then
-   echo "button1text: Migration Assistant..." >> "$TRACKER_COMMAND"
-  else
-   echo "button1text: Close" >> "$TRACKER_COMMAND"
-  fi
-  sleep 0.1
-  echo "end:" >> "$TRACKER_COMMAND"
-
-  # MARK: Wait for dialog to close
-  #  So as not to let macOS close it unintentionally
-  until [ "$( pgrep "Dialog" )" = "" ]; do
-   sleep 1
-  done
-  
-  if [ "$( pgrep 'Migration Assistant' )" = "" ] && [ "$( whoLogged )" = "$TEMP_ADMIN" ] && [ $FAILED_COUNT -eq 0 ]; then
-   shutdown -r now
-  fi
+  COMMAND_FILE="/tmp/finished-$$"
+  activateLoop() {
+   while [ -e "$COMMAND_FILE" ]; do
+    echo "activate:" >> "$COMMAND_FILE"
+    sleep 5
+   done
+  }
+  activateLoop &
+  "$C_DIALOG" --title "Installation Complete$( if [ $FAILED_COUNT -gt 0 ]; then echo " (with some failures)" ; fi )" --message "Restart, Migrate, or check the logs?" \
+   --helpmessage "**Buttons**:  <br>- **View Details** for logs or task list,  \n- Open **Migration Assistant**, or  \n- To log in, **Restart Now**" \
+   --infobuttontext "View Details" --button2text "Migration Assistant" --button1text "Restart Now" \
+   --icon "$DIALOG_ICON" --iconsize 75 --height 200 --width 500 --commandfile "$COMMAND_FILE"
+  case $? in
+   *)
+    rm -f "$COMMAND_FILE"
+   ;|
+   ^0)
+    logIt "Removing the blurscreen"
+    echo "blurscreen: disable" >> "$TRACKER_COMMAND"
+    sleep 0.1
+   ;|
+   0|2)
+    logIt "Closing the log viewer/task list"
+    echo "end:" >> "$TRACKER_COMMAND"
+    until [ "$( pgrep "Dialog" )" = "" ]; do
+     sleep 1
+    done
+   ;|
+   0)
+    logIt "Restarting..."
+    shutdown -r now
+   ;;
+   2)
+    logIt "Opening Migration Assistant"
+    launchctl asuser $( id -u $( whoLogged ) ) /usr/bin/open /System/Applications/Utilities/Migration\ Assistant.app
+   ;;
+   3)
+    logIt "Leaving the log viewer/task list open for viewing"
+   ;|
+   ^3)
+    logIt "======= How did we get here?!? Log viewer/task list left open"
+   ;|
+   *)
+    logIt "Restarting the Finder & Dock"
+    whoId=$( id -u $( whoLogged ) )
+    launchctl asuser $whoId launchctl bootstrap gui/$whoId /System/Library/LaunchAgents/com.apple.Finder.plist
+    sleep 0.1
+    launchctl asuser $whoId launchctl bootstrap gui/$whoId /System/Library/LaunchAgents/com.apple.Dock.plist
+    sleep 0.1
+    launchctl asuser $whoId launchctl start com.apple.Finder
+    sleep 0.1
+    launchctl asuser $whoId launchctl start com.apple.Dock.agent
+   ;;
+  esac
  ;;
  # MARK: Clean up
  cleanUp)
