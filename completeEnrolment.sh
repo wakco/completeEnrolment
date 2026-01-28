@@ -1564,13 +1564,14 @@ case $1 in
     sleep 0.1
    ;|
    2)
+    logIt "Opening Migration Assistant"
+    launchctl asuser $( id -u $( whoLogged ) ) /usr/bin/open /System/Applications/Utilities/Migration\ Assistant.app
+    sleep 1
     logIt "Closing the log viewer/task list"
     echo "end:" >> "$TRACKER_COMMAND"
     until [ "$( pgrep "Dialog" )" = "" ]; do
      sleep 1
     done
-    logIt "Opening Migration Assistant"
-    launchctl asuser $( id -u $( whoLogged ) ) /usr/bin/open /System/Applications/Utilities/Migration\ Assistant.app
    ;;
    3)
     logIt "Leaving the log viewer/task list open for viewing"
