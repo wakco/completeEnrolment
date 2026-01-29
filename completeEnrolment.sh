@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.24"
+VERSION="1.25"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -1547,11 +1547,11 @@ case $1 in
    done
   }
   activateLoop &
-  "$C_DIALOG" --title "Installation Complete$( if [ $FAILED_COUNT -gt 0 ]; then echo " (with some failures)" ; fi )" \
-   --message "$SUCCESS_COUNT of $( jq 'installCount' ) installed.  \n\nRestart, Migrate, or check the logs?" \
+  "$C_DIALOG" --title "Installation Complete" --message "$SUCCESS_COUNT of $( jq 'installCount' ) installed.  \n\nRestart, Migrate, or check the logs?" \
    --helpmessage "**Buttons**:  <br>- **View Details** for logs or task list,  \n- Open **Migration Assistant**, or  \n- To log in, **Restart Now**" \
    --infobuttontext "View Details" --button2text "Migration Assistant" --button1text "Restart Now" \
-   --icon "$DIALOG_ICON" --iconsize 75 --height 200 --width 500 --commandfile "$COMMAND_FILE" --ontop
+   --icon "$( if [ $FAILED_COUNT -gt 0 ]; then echo "caution" ; else echo "$DIALOG_ICON" ; fi )" \
+   --iconsize 150 --height 200 --width 500 --commandfile "$COMMAND_FILE" --ontop
   case $? in
    *)
     rm -f "$COMMAND_FILE"
