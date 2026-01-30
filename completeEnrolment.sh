@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.25"
+VERSION="1.26"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -71,7 +71,7 @@ if [ -e /usr/bin/jq ]; then
   printf '%s' "$1" | /usr/bin/jq -eMr ".$2 // empty"
  }
 else
- # makeshift jq replacement
+ # makeshift jq replacement - From macOS 15 jq is built-in, so this will be removed by version 2
  jq() {
   # JavaScript method can't do key[.otherkey], and doesn't output json format, so must be weary
   #  currently only using listitem[.currentitem].key so we replace .currentitem here with its
