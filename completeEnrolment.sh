@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.26"
+VERSION="1.27"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -860,11 +860,6 @@ case $1 in
     
    ;|
    *)
-    # MARK: Setup Startup after restart
-    trackNow "Add this script to startup process" \
-     secure "defaults write '$STARTUP_PLIST' Label '$DEFAULTS_NAME' ; defaults write '$STARTUP_PLIST' RunAtLoad -bool TRUE ; defaults write '$STARTUP_PLIST' ProgramArguments -array '$C_ENROLMENT' ; chmod go+r '$STARTUP_PLIST'" "Creating '$STARTUP_PLIST'" \
-     file "$STARTUP_PLIST" 'SF=autostartstop'
-
     # MARK: Unbind Active Directory
     #  (if bound)
     if [ "$( ls /Library/Preferences/OpenDirectory/Configurations/Active\ Directory | wc -l )" -gt 0 ]; then
@@ -893,13 +888,23 @@ case $1 in
      command "'$C_JAMF' recon" \
      date '' 'SF=list.bullet.rectangle'
 
+    # MARK: Setup Startup after restart
+    trackNow "Add this script to startup process" \
+     secure "defaults write '$STARTUP_PLIST' Label '$DEFAULTS_NAME' ; defaults write '$STARTUP_PLIST' RunAtLoad -bool TRUE ; defaults write '$STARTUP_PLIST' ProgramArguments -array '$C_ENROLMENT' ; chmod go+r '$STARTUP_PLIST'" "Creating '$STARTUP_PLIST'" \
+     file "$STARTUP_PLIST" 'SF=autostartstop'
+
     # MARK: Install mkuser
     trackNow "Installing mkuser" \
      install mkuser \
      file "$C_MKUSER" 'SF=person.3.sequence'
-    
+
+    # MARK: Wait for admin account details
+    trackNow "Waiting for additional dynamic configuration" \
+     secure "sleep 30" "Checking for initial administrator account details" \
+     test "defaultRead tempAdmin" 'SF=person.badge.clock'
+
     # MARK: Add our TEMP_ADMIN
-    addAdmin "$TEMP_ADMIN" "$( readSaved temp )" "$TEMP_NAME" "Initial Setup" "$SECURE_ADMIN" "$SECURE_PASS" "--automatic-login"
+    addAdmin "$TEMP_ADMIN" "$( defaultRead tempAdmin )" "$TEMP_NAME" "Initial Setup" "$SECURE_ADMIN" "$SECURE_PASS" "--automatic-login"
     
     unset SECURE_ADMIN
     unset SECURE_PASS
