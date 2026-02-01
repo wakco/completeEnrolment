@@ -216,6 +216,16 @@
    ],
    "default": 5
   },
+  "finderKeep": {
+   "title": "Leave Finder running?",
+   "description": "The script will shutdown the Finder while running and the computer is logged into the temporary admin account (PreStage enrolment only), disabling this will leave the Finder running. Default is to shutdown the Finder (false).",
+   "type": "boolean"
+  },
+  "dockKeep": {
+   "title": "Leave Dock running?",
+   "description": "The script will shutdown the Dock while running and the computer is logged into the temporary admin account (PreStage enrolment only), disabling this will leave the Dock running. Default is to shutdown the Dock (false).",
+   "type": "boolean"
+  },
   "forceInstall": {
    "title": "Force installation",
    "description": "The Installomator script can force the installation of an app it is asked to install regardless of if the app is installed already or not, let alone up to date. Setting this to true will force the install, it will also stop testing if a task has already happened before running the task. Default is update if newer is available (false or unset), and test before each task, as well as after.",

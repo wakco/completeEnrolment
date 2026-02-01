@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.27"
+VERSION="1.28"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -419,7 +419,7 @@ trackIt() {
    track update statustext "Paused"
   ;;
   *)
-   if ! $( defaultReadBool forceInstall ); then
+   if ! defaultReadBool forceInstall; then
     testIt 1 $3 $4 $5
     if [ $? -eq 0 ]; then
      return 0
@@ -948,7 +948,7 @@ case $1 in
     runIt "'$C_ENROLMENT' process >> /dev/null 2>&1"
    ;;
   esac
-  if ${$( defaultReadBool emailJamfLog ):-false} ; then
+  if defaultReadBool emailJamfLog; then
    # cannot use errorIt to exit here, since 1. this was request, as such, not actually an error, and
    #  2. because errorIt will also cleanUp, which is definitely not wanted at this stage.
    logIt "Exiting with an error signal as requested in the configuration."
@@ -1015,8 +1015,12 @@ case $1 in
   #  if we just started up (i.e. if whoLogged = TEMP_ADMIN)
   if [ "$( whoLogged )" = "$TEMP_ADMIN" ]; then
    track update status success
-   launchctl bootout gui/$( id -u $( whoLogged ) )/com.apple.Dock.agent
-   launchctl bootout gui/$( id -u $( whoLogged ) )/com.apple.Finder
+   if ! defaultReadBool dockKeep; then
+    launchctl bootout gui/$( id -u $( whoLogged ) )/com.apple.Dock.agent
+   fi
+   if ! defaultReadBool finderKeep; then
+    launchctl bootout gui/$( id -u $( whoLogged ) )/com.apple.Finder
+   fi
    sleep 2
   fi
   
@@ -1589,13 +1593,21 @@ case $1 in
    *)
     logIt "Restarting the Finder & Dock"
     whoId=$( id -u $( whoLogged ) )
-    launchctl asuser $whoId launchctl bootstrap gui/$whoId /System/Library/LaunchAgents/com.apple.Finder.plist
-    sleep 0.1
-    launchctl asuser $whoId launchctl bootstrap gui/$whoId /System/Library/LaunchAgents/com.apple.Dock.plist
-    sleep 0.1
-    launchctl asuser $whoId launchctl start com.apple.Finder
-    sleep 0.1
-    launchctl asuser $whoId launchctl start com.apple.Dock.agent
+    if ! defaultReadBool finderKeep; then
+     launchctl asuser $whoId launchctl bootstrap gui/$whoId /System/Library/LaunchAgents/com.apple.Finder.plist
+     sleep 0.1
+    if
+    if ! defaultReadBool dockKeep; then
+     launchctl asuser $whoId launchctl bootstrap gui/$whoId /System/Library/LaunchAgents/com.apple.Dock.plist
+     sleep 0.1
+    fi
+    if ! defaultReadBool finderKeep; then
+     launchctl asuser $whoId launchctl start com.apple.Finder
+     sleep 0.1
+    fi
+    if ! defaultReadBool dockKeep; then
+     launchctl asuser $whoId launchctl start com.apple.Dock.agent
+    fi
    ;;
   esac
  ;;
