@@ -90,6 +90,74 @@
 			<key>backuptype</key>
 			<string>none</string>
 		</dict>
+		<dict>
+			<key>title</key>
+			<string>Keynote Creator Studio</string>
+			<key>subtitletype</key>
+			<string>command</string>
+			<key>commandtype</key>
+			<string>mas</string>
+			<key>icon</key>
+			<string>https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/9b/bc/9a/9bbc9a11-e4c8-9977-3f30-72e7d9e8cf5a/AppIcon-0-0-85-220-0-0-6-0-0-2x-sRGB-0-0-0-0-0.png/512x0w.png</string>
+			<key>successtype</key>
+			<string>appstore</string>
+			<key>successtest</key>
+			<string>/Applications/Keynote Creator Studio.app</string>
+			<key>backuptype</key>
+			<string>none</string>
+		</dict>
+		<dict>
+			<key>title</key>
+			<string>Numbers Creator Studio</string>
+			<key>subtitletype</key>
+			<string>command</string>
+			<key>commandtype</key>
+			<string>mas</string>
+			<key>icon</key>
+			<string>https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/ba/bd/ab/babdab39-1c5a-7dfa-ab12-34e9298e3311/AppIcon-0-0-85-220-0-0-6-0-0-2x-sRGB-0-0-0-0-0.png/512x0w.png</string>
+			<key>successtype</key>
+			<string>appstore</string>
+			<key>successtest</key>
+			<string>/Applications/Numbers Creator Studio.app</string>
+			<key>backuptype</key>
+			<string>none</string>
+		</dict>
+		<dict>
+			<key>title</key>
+			<string>Pages Creator Studio</string>
+			<key>subtitletype</key>
+			<string>command</string>
+			<key>commandtype</key>
+			<string>mas</string>
+			<key>icon</key>
+			<string>https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/4b/a1/c1/4ba1c1d6-391f-295f-237c-6b64d29e4d1a/AppIcon-0-0-85-220-0-0-6-0-0-2x-sRGB-0-0-0-0-0.png/512x0w.png</string>
+			<key>successtype</key>
+			<string>appstore</string>
+			<key>successtest</key>
+			<string>/Applications/Pages Creator Studio.app</string>
+			<key>backuptype</key>
+			<string>none</string>
+		</dict>
+  <dict>
+   <key>title</key>
+   <string>Remove iWork apps</string>
+   <key>subtitle</key>
+   <string>Older iWork apps (Keynote, Numbers, and Pages) require removal</string>
+   <key>subtitletype</key>
+   <string>secure</string>
+   <key>commandtype</key>
+   <string>command</string>
+   <key>command</key>
+   <string>rm -rf /Applications/Keynote.app /Applications/Numbers.app /Applications/Pages.app</string>
+   <key>icon</key>
+   <string>SF=xmark.app</string>
+   <key>successtype</key>
+   <string>test</string>
+   <key>successtest</key>
+   <string>[ $( ls /Applications | grep -Ec '(Keynote|Numbers|Pages).app' ) -eq 0 ]</string>
+   <key>backuptype</key>
+   <string>none</string>
+  </dict>
 	</array>
 </dict>
 </plist>
