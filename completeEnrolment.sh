@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.31"
+VERSION="1.32"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -1552,7 +1552,7 @@ case $1 in
   activateLoop() {
    while [ -e "$COMMAND_FILE" ]; do
     echo "activate:" >> "$COMMAND_FILE"
-    sleep 5
+    sleep 60
    done
   }
   activateLoop &
@@ -1562,9 +1562,6 @@ case $1 in
    --icon "$( if [ $FAILED_COUNT -gt 0 ]; then echo "caution" ; else echo "$DIALOG_ICON" ; fi )" \
    --iconsize 150 --height 200 --width 500 --commandfile "$COMMAND_FILE" --ontop
   case $? in
-   *)
-    rm -f "$COMMAND_FILE"
-   ;|
    0)
     logIt "Restarting..."
     shutdown -r now
@@ -1583,7 +1580,7 @@ case $1 in
     # as the Log/Task List is still open, provide an option to close it.
     logIt "Opening Close dialog"
     "$C_DIALOG" --title none --message "Close Log/Task List?" --icon "$DIALOG_ICON" --button1text "Close" \
-     --moveable --position bottomright --style centered --height 200 --width 250
+     --moveable --position bottomright --style centered --height 200 --width 250 --commandfile "$COMMAND_FILE"
    ;|
    *)
     logIt "Closing the log viewer/task list"
@@ -1591,6 +1588,7 @@ case $1 in
     until [ "$( pgrep "Dialog" )" = "" ]; do
      sleep 1
     done
+    rm -f "$COMMAND_FILE"
    ;|
    3)
     logIt "Leaving the log viewer/task list open for viewing"
