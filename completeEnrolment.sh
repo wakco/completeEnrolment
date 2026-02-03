@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.28"
+VERSION="1.29"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -419,7 +419,7 @@ trackIt() {
    track update statustext "Paused"
   ;;
   *)
-   if ! defaultReadBool forceInstall; then
+   if ! $( defaultReadBool forceInstall ); then
     testIt 1 $3 $4 $5
     if [ $? -eq 0 ]; then
      return 0
@@ -678,7 +678,7 @@ case $1 in
   track string position "bottom"
   track string height "90%"
   track string width "90%"
-  if defaultReadBool appearance; then
+  if $( defaultReadBool appearance ); then
    track string appearance dark
   else
    track string appearance light
@@ -948,7 +948,7 @@ case $1 in
     runIt "'$C_ENROLMENT' process >> /dev/null 2>&1"
    ;;
   esac
-  if defaultReadBool emailJamfLog; then
+  if $( defaultReadBool emailJamfLog ); then
    # cannot use errorIt to exit here, since 1. this was request, as such, not actually an error, and
    #  2. because errorIt will also cleanUp, which is definitely not wanted at this stage.
    logIt "Exiting with an error signal as requested in the configuration."
@@ -1015,10 +1015,10 @@ case $1 in
   #  if we just started up (i.e. if whoLogged = TEMP_ADMIN)
   if [ "$( whoLogged )" = "$TEMP_ADMIN" ]; then
    track update status success
-   if ! defaultReadBool dockKeep; then
+   if ! $( defaultReadBool dockKeep ); then
     launchctl bootout gui/$( id -u $( whoLogged ) )/com.apple.Dock.agent
    fi
-   if ! defaultReadBool finderKeep; then
+   if ! $( defaultReadBool finderKeep ); then
     launchctl bootout gui/$( id -u $( whoLogged ) )/com.apple.Finder
    fi
    sleep 2
@@ -1115,7 +1115,7 @@ case $1 in
 
    trackNew "Task List"
    if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
-# need to track what has been done better
+    # need to track what has been done better
     track update icon 'SF=checklist'
     track update status pending
     track update statustext "Loading..."
@@ -1593,19 +1593,19 @@ case $1 in
    *)
     logIt "Restarting the Finder & Dock"
     whoId=$( id -u $( whoLogged ) )
-    if ! defaultReadBool finderKeep; then
+    if ! $( defaultReadBool finderKeep ); then
      launchctl asuser $whoId launchctl bootstrap gui/$whoId /System/Library/LaunchAgents/com.apple.Finder.plist
      sleep 0.1
-    if
-    if ! defaultReadBool dockKeep; then
+    fi
+    if ! $( defaultReadBool dockKeep ); then
      launchctl asuser $whoId launchctl bootstrap gui/$whoId /System/Library/LaunchAgents/com.apple.Dock.plist
      sleep 0.1
     fi
-    if ! defaultReadBool finderKeep; then
+    if ! $( defaultReadBool finderKeep ); then
      launchctl asuser $whoId launchctl start com.apple.Finder
      sleep 0.1
     fi
-    if ! defaultReadBool dockKeep; then
+    if ! $( defaultReadBool dockKeep ); then
      launchctl asuser $whoId launchctl start com.apple.Dock.agent
     fi
    ;;
