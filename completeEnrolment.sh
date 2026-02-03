@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.30"
+VERSION="1.31"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -962,7 +962,7 @@ case $1 in
   # to open the event tracking dialog
   TRACKER=true
   echo > "$TRACKER_COMMAND"
-  until [[ "$( tail -n1 "$TRACKER_COMMAND" )" = "end:" ]]; do
+  until [[ "$( tail -n1 "$TRACKER_COMMAND" )" = "quit:" ]]; do
    if $TRACKER; then
     touch "$TRACKER_RUNNING"
     logIt "Starting Progress Dialog..."
@@ -1579,7 +1579,7 @@ case $1 in
     launchctl asuser $( id -u $( whoLogged ) ) /usr/bin/open /System/Applications/Utilities/Migration\ Assistant.app
     sleep 1
     logIt "Closing the log viewer/task list"
-    echo "end:" >> "$TRACKER_COMMAND"
+    echo "quit:" >> "$TRACKER_COMMAND"
     until [ "$( pgrep "Dialog" )" = "" ]; do
      sleep 1
     done
