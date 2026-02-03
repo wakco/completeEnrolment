@@ -138,26 +138,26 @@
 			<key>backuptype</key>
 			<string>none</string>
 		</dict>
-  <dict>
-   <key>title</key>
-   <string>Remove iWork apps</string>
-   <key>subtitle</key>
-   <string>Older iWork apps (Keynote, Numbers, and Pages) require removal</string>
-   <key>subtitletype</key>
-   <string>secure</string>
-   <key>commandtype</key>
-   <string>command</string>
-   <key>command</key>
-   <string>rm -rf /Applications/Keynote.app /Applications/Numbers.app /Applications/Pages.app</string>
-   <key>icon</key>
-   <string>SF=xmark.app</string>
-   <key>successtype</key>
-   <string>test</string>
-   <key>successtest</key>
-   <string>[ $( ls /Applications | grep -Ec '(Keynote|Numbers|Pages).app' ) -eq 0 ]</string>
-   <key>backuptype</key>
-   <string>none</string>
-  </dict>
+		<dict>
+			<key>title</key>
+			<string>Remove iWork apps</string>
+			<key>subtitle</key>
+			<string>Older iWork apps (Keynote/Numbers/Pages) require removal</string>
+			<key>subtitletype</key>
+			<string>secure</string>
+			<key>commandtype</key>
+			<string>command</string>
+			<key>command</key>
+			<string>rm -rf /Applications/Keynote.app /Applications/Numbers.app /Applications/Pages.app</string>
+			<key>icon</key>
+			<string>SF=xmark.app</string>
+			<key>successtype</key>
+			<string>test</string>
+			<key>successtest</key>
+			<string>[ $( ls /Applications | grep -Ec '(Keynote|Numbers|Pages).app' ) -eq 0 ]</string>
+			<key>backuptype</key>
+			<string>none</string>
+		</dict>
 	</array>
 </dict>
 </plist>
