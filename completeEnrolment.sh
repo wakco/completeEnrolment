@@ -1578,19 +1578,27 @@ case $1 in
     logIt "Opening Migration Assistant"
     launchctl asuser $( id -u $( whoLogged ) ) /usr/bin/open /System/Applications/Utilities/Migration\ Assistant.app
     sleep 1
+   ;|
+   ^2)
+    # as the Log/Task List is still open, provide an option to close it.
+    logIt "Opening Close dialog"
+    "$C_DIALOG" --title none --message "Close Log/Task List?" --icon "$DIALOG_ICON" --button1text "Close" \
+     --moveable --position bottomright --style centered --height 200 --width 250
+   ;|
+   *)
     logIt "Closing the log viewer/task list"
     echo "quit:" >> "$TRACKER_COMMAND"
     until [ "$( pgrep "Dialog" )" = "" ]; do
      sleep 1
     done
-   ;;
+   ;|
    3)
     logIt "Leaving the log viewer/task list open for viewing"
    ;|
    ^3)
     logIt "======= How did we get here?!? Log viewer/task list left open"
    ;|
-   *)
+   ^2)
     logIt "Restarting the Finder & Dock"
     whoId=$( id -u $( whoLogged ) )
     if ! $( defaultReadBool finderKeep ); then
