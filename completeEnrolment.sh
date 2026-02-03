@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.29"
+VERSION="1.30"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -904,7 +904,7 @@ case $1 in
      test "defaultRead tempAdmin" 'SF=person.badge.clock'
 
     # MARK: Add our TEMP_ADMIN
-    addAdmin "$TEMP_ADMIN" "$( defaultRead tempAdmin )" "$TEMP_NAME" "Initial Setup" "$SECURE_ADMIN" "$SECURE_PASS" "--automatic-login"
+    addAdmin "$TEMP_ADMIN" "$( readSaved temp )" "$TEMP_NAME" "Initial Setup" "$SECURE_ADMIN" "$SECURE_PASS" "--automatic-login"
     
     unset SECURE_ADMIN
     unset SECURE_PASS
