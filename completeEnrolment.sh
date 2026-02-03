@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.32"
+VERSION="1.33"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -101,13 +101,25 @@ LOG_FILE="$LIB/Logs/$DEFAULTS_NAME-$( if [ "$1" = "/" ]; then echo "Jamf" ; else
 # MARK: Functions
 
 selfService() {
-# The following should work, however in the 11.25.0 beta the self_service_plus_path setting contains the non-plus name ?!?
-# SELF_SERVICE="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist self_service_plus_path 2>/dev/null )"
-# if [ "$SELF_SERVICE" = "" ]; then
-#  SELF_SERVICE="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist self_service_app_path 2>/dev/null )"
-# fi
-# So instead, lets just use the first version of Self Service that appears in the Applications folder.
- ls -d /Applications/* | grep -m1 "Self Service"
+ # Finding the configured and installed Self Service app has become a little bit complicated.
+ # Jamf recommended the mdfind command, but the guy forgot about the original Self Service app.
+ # The ls command is simpler,but is really a last resort since the app might be renamed, so we
+ # Read check what is configured first, failing that try mdfind, limiting it to /Applications,
+ # and if that still fails, fall back to anything matching: /Applications/*Self Service*
+ SSMETHODS=(
+  "defaults read /Library/Preferences/com.jamfsoftware.jamf.plist self_service_plus_path 2>/dev/null"
+  "defaults read /Library/Preferences/com.jamfsoftware.jamf.plist self_service_app_path 2>/dev/null"
+  "mdfind kMDItemCFBundleIdentifier = 'com.jamf.selfserviceplus' | grep -E '^/Applications'"
+  "mdfind kMDItemCFBundleIdentifier = 'com.jamfsoftware.selfservice.mac' | grep -E '^/Applications'"
+  "ls -d /Applications/* | grep -m1 'Self Service'"
+ )
+ for SSCHECK in $SSMETHODS ; do
+  SELF_SERVICE="$( eval "$SSCHECK" )"
+  if [ ! "$SELF_SERVICE" = "" ] && [ -e "$SELF_SERVICE" ]; then
+   echo "$SELF_SERVICE"
+   break
+  fi
+ done
 }
 
 logIt() {
