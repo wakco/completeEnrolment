@@ -1266,7 +1266,7 @@ case $1 in
        fi
        track update backupcommand "$( listRead "installs.$( jq 'installCount' ).backupcommand" )"
        track update status pending
-       track update statustext "waiting to install..."
+       track update statustext "waiting for install..."
       fi
       infoBox
       track integer installCount $(($( jq 'installCount' )+1))
