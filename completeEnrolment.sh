@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.33"
+VERSION="1.34"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -609,10 +609,24 @@ addAdmin() {
 
 
 # MARK: Lets get started
-
+# First don't let the computer sleep
 caffeinate -dimsuw $$ &
 
-# dono't do anything without a config file
+# Then make sure Setup Assistant thinks we are as done as possible
+# This should help with a macOS 15 automated setup process quirk with the Terms of Service
+sPath="/private/var/db/.Apple"
+sTerm="SetupTermsOfService"
+sDone="SetupDone"
+sDiag="Diagnostics$sDone"
+if [ -e "$sPath$sTerm" ]; then
+ rm -f "$sPath$sTerm"
+fi
+touch "$sPath$sDiag" "$sPath$sDone"
+chown root:wheel "$sPath$sDiag" "$sPath$sDone"
+chmod 400 "$sPath$sDiag" "$sPath$sDone"
+unset sPath sTerm sDone sDiag
+
+# don't do anything without a config file
 until [ -e "$DEFAULTS_FILE" ]; do
  sleep 1
 done
