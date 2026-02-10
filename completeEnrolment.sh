@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.35"
+VERSION="1.36"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -238,6 +238,8 @@ bothAdd() {
 infoBox() {
  INFOBOX=""
  HELPBOX=""
+ helpAdd "The **Show Log/Tasks...** button will switch between log and task list views, and reset the screen in the process."
+ helpAdd "---"
  helpAdd "$SCRIPTNAME v$VERSION"
  bothAdd "**macOS $( sw_vers -productversion )** on  <br>$( scutil --get ComputerName )  <br>(S/N: $SERIALNUMBER)"
  if [ "$( jq 'startdate' )" != "" ]; then
@@ -1058,6 +1060,8 @@ case $1 in
   TRACKER=true
   echo > "$TRACKER_COMMAND"
   until [[ "$( tail -n1 "$TRACKER_COMMAND" )" = "quit:" ]]; do
+   killall -9 Dock
+   sleep 1
    if $TRACKER; then
     touch "$TRACKER_RUNNING"
     logIt "Starting Progress Dialog..."
@@ -1106,13 +1110,10 @@ case $1 in
     
   sleep 2
   
-  # MARK: Close Finder & Dock
+  # MARK: Close Finder
   #  if we just started up (i.e. if whoLogged = TEMP_ADMIN)
   if [ "$( whoLogged )" = "$TEMP_ADMIN" ]; then
    track update status success
-   if ! $( defaultReadBool dockKeep ); then
-    launchctl bootout gui/$( id -u $( whoLogged ) )/com.apple.Dock.agent
-   fi
    if ! $( defaultReadBool finderKeep ); then
     launchctl bootout gui/$( id -u $( whoLogged ) )/com.apple.Finder
    fi
@@ -1692,22 +1693,13 @@ case $1 in
     logIt "======= How did we get here?!? Log viewer/task list left open"
    ;|
    ^2)
-    logIt "Restarting the Finder & Dock"
-    whoId=$( id -u $( whoLogged ) )
+    logIt "Restarting the Finder"
     if ! $( defaultReadBool finderKeep ); then
+     whoId=$( id -u $( whoLogged ) )
      launchctl asuser $whoId launchctl bootstrap gui/$whoId /System/Library/LaunchAgents/com.apple.Finder.plist
      sleep 0.1
-    fi
-    if ! $( defaultReadBool dockKeep ); then
-     launchctl asuser $whoId launchctl bootstrap gui/$whoId /System/Library/LaunchAgents/com.apple.Dock.plist
-     sleep 0.1
-    fi
-    if ! $( defaultReadBool finderKeep ); then
      launchctl asuser $whoId launchctl start com.apple.Finder
      sleep 0.1
-    fi
-    if ! $( defaultReadBool dockKeep ); then
-     launchctl asuser $whoId launchctl start com.apple.Dock.agent
     fi
    ;;
   esac
