@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.34"
+VERSION="1.35"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -945,6 +945,75 @@ case $1 in
     runIt "sudo -u '$TEMP_ADMIN' defaults write '/Users/$TEMP_ADMIN/Library/Preferences/com.jamfsoftware.selfservice.mac.plist' 'com.jamfsoftware.selfservice.onboardingcomplete' -bool TRUE"
     runIt "sudo -u '$TEMP_ADMIN' defaults write '/Users/$TEMP_ADMIN/Library/Preferences/com.jamfsoftware.selfserviceplus.plist' 'com.jamfsoftware.selfservice.onboardingcomplete' -bool TRUE"
     runIt "chown '$TEMP_ADMIN' /Users/$TEMP_ADMIN/Library/Preferences/com.jamfsoftware.selfservice*"
+    
+    sPlist="/Users/$TEMP_ADMIN/Library/Preferences/com.apple.SetupAssistant.plist"
+    sOS="$(sw_vers --productVersion)"
+    sBuild="$(sw_vers --buildVersion)"
+    
+    setupTempAdmin() {
+     for sItem in $sList; do
+      runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' '$sItem' $1"
+     done
+    }
+    
+    sList=(
+     "DidSeeAccessibility"
+     "DidSeeActivationLock"
+     "DidSeeAppStore"
+     "DidSeeAppearanceSetup"
+     "DidSeeApplePaySetup"
+     "DidSeeAvatarSetup"
+     "DidSeeCloudSetup"
+     "DidSeeCloudSetup"
+     "DidSeeIntelligence"
+     "DidSeeLockdownMode"
+     "DidSeePrivacy"
+     "DidSeeScreenTime"
+     "DidSeeSiriSetup"
+     "DidSeeSyncSetup"
+     "DidSeeSyncSetup2"
+     "DidSeeTermsOfAddress"
+     "DidSeeTouchIDSetup"
+     "DidSeeTrueTone"
+     "DidSeeiCloudLoginForStorageServices"
+    )
+    setupTempAdmin "-bool TRUE"
+
+    sList=(
+     "InitialAccountOnMac"
+     "MiniBuddyLaunchedPostMigration"
+     "MiniBuddyShouldLaunchToResumeSetup"
+     "NSAddServicesToContextMenus"
+     "SkipFirstLoginOptimization"
+    )
+    setupTempAdmin "-bool FALSE"
+
+    sList=(
+     "DidSeeNewFeaturesProductVersion"
+     "InitialSetupProductVersion"
+     "LastPreLoginTasksPerformedVersion"
+     "LastSeenCloudProductVersion"
+     "LastSeenDiagnosticsProductVersion"
+     "LastSeenSiriProductVersion"
+     "LastSeenSyncProductVersion"
+     "LastSeeniCloudStorageServicesProductVersion"
+    )
+    setupTempAdmin "-string '$sOS'"
+
+    sList=(
+     "InitialSetupBuildVersion"
+     "LastPreLoginTasksPerformedBuild"
+     "LastSeenBuddyBuildVersion"
+    )
+    setupTempAdmin "-string '$sBuild'"
+
+    runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' 'LastPrivacyBundleVersion' -string 2"
+    runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' 'PreviousBuildVersion' -string 0"
+    runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' 'PreviousSystemVersion' -string 0"
+    runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' 'MiniBuddyLaunchReason' -integer 0"
+    runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' 'InitialAccountSetupDate' -date '$( date -j -v-1d "+%Y-%m-%dT%H:%M:%SZ" )'"
+    unset sList sPlist sOS sBuilt
+
    ;|
 
    _mbsetupuser)
