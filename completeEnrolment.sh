@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.39"
+VERSION="1.40"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -433,7 +433,7 @@ trackIt() {
    track update statustext "Paused"
   ;;
   *)
-   if ! $( defaultReadBool forceInstall ); then
+   if $( defaultReadBool testBefore ); then
     testIt 1 $3 $4 $5
     if [ $? -eq 0 ]; then
      return 0
