@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.36"
+VERSION="1.37"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -930,6 +930,12 @@ case $1 in
     trackNow "Waiting for additional dynamic configuration" \
      secure "sleep 30" "Checking for initial administrator account details" \
      test "defaultRead tempAdmin" 'SF=person.badge.clock'
+
+    # Re-read these Admin account details
+    TEMP_ADMIN="${"$( defaultRead tempAdmin )":-"setup_admin"}"
+    TEMP_NAME="${"$( defaultRead tempName )":-"Setup Admin"}"
+    LAPS_ADMIN="${"$( defaultRead lapsAdmin )":-"laps_admin"}"
+    LAPS_NAME="${"$( defaultRead lapsName )":-"LAPS Admin"}"
 
     # MARK: Add our TEMP_ADMIN
     addAdmin "$TEMP_ADMIN" "$( readSaved temp )" "$TEMP_NAME" "Initial Setup" "$SECURE_ADMIN" "$SECURE_PASS" "--automatic-login"
