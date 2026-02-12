@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.37"
+VERSION="1.38"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -650,12 +650,14 @@ touch "$TRACKER_COMMAND" "$TRACKER_JSON" "$LOG_JSON"
 CLEANUP_FILES+=( "$INSTALLS_JSON" )
 CLEANUP_FILES+=( "$TRACKER_JSON" )
 CLEANUP_FILES+=( "$LOG_JSON" )
-TEMP_ADMIN="${"$( defaultRead tempAdmin )":-"setup_admin"}"
-TEMP_NAME="${"$( defaultRead tempName )":-"Setup Admin"}"
-LAPS_ADMIN="${"$( defaultRead lapsAdmin )":-"laps_admin"}"
-LAPS_NAME="${"$( defaultRead lapsName )":-"LAPS Admin"}"
 
 case $1 in
+ ^/)
+  TEMP_ADMIN="${"$( defaultRead tempAdmin )":-"setup_admin"}"
+  TEMP_NAME="${"$( defaultRead tempName )":-"Setup Admin"}"
+  LAPS_ADMIN="${"$( defaultRead lapsAdmin )":-"laps_admin"}"
+  LAPS_NAME="${"$( defaultRead lapsName )":-"LAPS Admin"}"
+ ;|
  # MARK: Jamf Enrolment
  /)
   # Install completeEnrolment
