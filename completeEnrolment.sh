@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.38"
+VERSION="1.39"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -609,6 +609,17 @@ addAdmin() {
  fi
 }
 
+# MARK: Load Admin Defaults
+loadDefaults() {
+ TEMP_ADMIN="${"$( defaultRead tempAdmin )":-"setup_admin"}"
+ TEMP_NAME="${"$( defaultRead tempName )":-"Setup Admin"}"
+ LAPS_ADMIN="${"$( defaultRead lapsAdmin )":-"laps_admin"}"
+ LAPS_NAME="${"$( defaultRead lapsName )":-"LAPS Admin"}"
+ ADMIN_ICON="${"$( defaultRead adminPicture )":-"--no-picture"}"
+ if [ "$ADMIN_ICON" != "--no-picture" ]; then
+  ADMIN_ICON="--picture '$ADMIN_ICON'"
+ fi
+}
 
 # MARK: Lets get started
 # First don't let the computer sleep
@@ -637,10 +648,6 @@ done
 
 PER_APP=${"$( defaultRead perAPP )":-"5"}
 DIALOG_ICON="${"$( defaultRead dialogIcon )":-"caution"}"
-ADMIN_ICON="${"$( defaultRead adminPicture )":-"--no-picture"}"
-if [ "$ADMIN_ICON" != "--no-picture" ]; then
- ADMIN_ICON="--picture '$ADMIN_ICON'"
-fi
 TRACKER_COMMAND="/tmp/completeEnrolment.DIALOG_COMMANDS.log"
 INSTALLS_JSON="$PREFS/completeEnrolment-installs.json"
 TRACKER_JSON="$PREFS/completeEnrolment-tracker.json"
@@ -653,10 +660,7 @@ CLEANUP_FILES+=( "$LOG_JSON" )
 
 case $1 in
  ^/)
-  TEMP_ADMIN="${"$( defaultRead tempAdmin )":-"setup_admin"}"
-  TEMP_NAME="${"$( defaultRead tempName )":-"Setup Admin"}"
-  LAPS_ADMIN="${"$( defaultRead lapsAdmin )":-"laps_admin"}"
-  LAPS_NAME="${"$( defaultRead lapsName )":-"LAPS Admin"}"
+  loadDefaults
  ;|
  # MARK: Jamf Enrolment
  /)
@@ -882,12 +886,6 @@ case $1 in
     done
     
     logIt "$SECURE_ADMIN details provided."
-    
-    # remove (if existing and not logged into) our admin account
-    
-    # code to be added
-    
-    
    ;|
    *)
     # MARK: Unbind Active Directory
@@ -933,11 +931,8 @@ case $1 in
      secure "sleep 30" "Checking for initial administrator account details" \
      test "defaultRead tempAdmin" 'SF=person.badge.clock'
 
-    # Re-read these Admin account details
-    TEMP_ADMIN="${"$( defaultRead tempAdmin )":-"setup_admin"}"
-    TEMP_NAME="${"$( defaultRead tempName )":-"Setup Admin"}"
-    LAPS_ADMIN="${"$( defaultRead lapsAdmin )":-"laps_admin"}"
-    LAPS_NAME="${"$( defaultRead lapsName )":-"LAPS Admin"}"
+    # Read the Admin account details
+    loadDefaults
 
     # MARK: Add our TEMP_ADMIN
     addAdmin "$TEMP_ADMIN" "$( readSaved temp )" "$TEMP_NAME" "Initial Setup" "$SECURE_ADMIN" "$SECURE_PASS" "--automatic-login"
