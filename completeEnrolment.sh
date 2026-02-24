@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.41"
+VERSION="1.42"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -27,7 +27,7 @@ DEFAULTS_NAME="completeEnrolment"
 # If you change DEFAULTS_NAME, make sure the domain in the config profiles match, or it won't work
 DEFAULTS_PLIST="$DEFAULTS_NAME.plist"
 LIB="/Library"
-PREFS="/private/var/root$LIB/Preferences"
+PREFS="$LIB/Preferences"
 DEFAULTS_BASE="$LIB/Managed Preferences/$DEFAULTS_NAME"
 DEFAULTS_FILE="$LIB/Managed Preferences/$DEFAULTS_PLIST"
 CLEANUP_FILES=( "$C_ENROLMENT" )
