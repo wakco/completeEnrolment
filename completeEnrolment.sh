@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.42"
+VERSION="1.43"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -1659,7 +1659,7 @@ case $1 in
    --helpmessage "**Buttons**:  <br>- **View Details** for logs or task list,  \n- Open **Migration Assistant**, or  \n- To log in, **Restart Now**" \
    --infobuttontext "View Details" --button2text "Migration Assistant" --button1text "Restart Now" \
    --icon "$( if [ $FAILED_COUNT -gt 0 ]; then echo "caution" ; else echo "$DIALOG_ICON" ; fi )" \
-   --iconsize 150 --height 200 --width 500 --commandfile "$COMMAND_FILE" --ontop
+   --iconsize 150 --height 200 --width 550 --commandfile "$COMMAND_FILE" --ontop
   case $? in
    0)
     logIt "Restarting..."
