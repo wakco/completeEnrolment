@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.44"
+VERSION="1.45"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -97,6 +97,8 @@ fi
 # This will Generate a number of log files based on the task and when they started.
 
 LOG_FILE="$LIB/Logs/$DEFAULTS_NAME-$( if [ "$1" = "/" ]; then echo "Jamf" ; else echo "$1" ; fi )-$( whoLogged )-$( date "+%Y-%m-%d %H-%M-%S %Z" ).log"
+touch "$LOG_FILE"
+chmod ugo+r "$LOG_FILE"
 
 # MARK: Functions
 
@@ -143,7 +145,7 @@ defaultRead() {
  for (( i = 1; i < 11 ; i++ )); do
   defaultResult="$( defaults read "$DEFAULTS_FILE" "$1" 2>/dev/null )"
   echo "$(date) - (Attempt #$i) Reading Preference $1: $defaultResult" >> "$LOG_FILE"
-  if [ "$defaultResult" != "" ] || [ -e "$DEFAULTS_FILE" ] && $checkOnce ; then
+  if [ "$defaultResult" != "" ] || [[ -e "$DEFAULTS_FILE" && $checkOnce ]]; then
    break
   elif [ $i -lt 10 ] ; then
    sleep 30
@@ -244,7 +246,7 @@ infoBox() {
  HELPBOX=""
  helpAdd "The **Show Log/Tasks...** button will switch between log and task list views, and reset the screen in the process."
  helpAdd "---"
- helpAdd "$SCRIPTNAME v$VERSION"
+ helpAdd "$SCRIPTNAME v$VERSION, using swiftDialog v$( "$C_DIALOG" --version )"
  bothAdd "**macOS $( sw_vers -productversion )** on  <br>$( scutil --get ComputerName )  <br>(S/N: $SERIALNUMBER)"
  if [ "$( jq 'startdate' )" != "" ]; then
   bothAdd "**Started:**  <br>$( jq startdate )"
@@ -658,6 +660,7 @@ TRACKER_JSON="$PREFS/completeEnrolment-tracker.json"
 LOG_JSON="$PREFS/completeEnrolment-log.json"
 TRACKER_RUNNING="/tmp/completeEnrolment.DIALOG.run"
 touch "$TRACKER_COMMAND" "$TRACKER_JSON" "$LOG_JSON"
+chmod ugo+r "$TRACKER_COMMAND" "$TRACKER_JSON" "$LOG_JSON"
 CLEANUP_FILES+=( "$INSTALLS_JSON" )
 CLEANUP_FILES+=( "$TRACKER_JSON" )
 CLEANUP_FILES+=( "$LOG_JSON" )
@@ -727,7 +730,7 @@ case $1 in
   track string liststyle "compact"
   track bool allowSkip true
   plutil -replace displaylog -string "$LOG_FILE" "$LOG_JSON"
-  plutil -replace loghistory -integer 10000 "$LOG_JSON"
+  plutil -replace loghistory -integer 5000 "$LOG_JSON"
 
   # MARK: set time
   TIME_ZONE="${"$( defaultRead systemTimeZone true )":-"$( systemsetup -gettimezone | awk "{print \$NF}" )"}"
@@ -808,15 +811,14 @@ case $1 in
 
     # MARK: Start dialog on loginwindow
     sleep 2
-    defaults write "$LOGIN_PLIST" LimitLoadToSessionType -array "LoginWindow"
-    defaults write "$LOGIN_PLIST" Label "$DEFAULTS_NAME.loginwindow"
-    defaults write "$LOGIN_PLIST" RunAtLoad -bool TRUE
-    defaults write "$LOGIN_PLIST" ProgramArguments -array "$C_DIALOG" "--ontop" \
-     "--loginwindow" "--button1disabled" "--button1text" "none" "--jsonfile" "$TRACKER_JSON"
-    chmod ugo+r "$LOGIN_PLIST"
+    runIt "defaults write '$LOGIN_PLIST' LimitLoadToSessionType -array 'LoginWindow'"
+    runIt "defaults write '$LOGIN_PLIST' Label '$DEFAULTS_NAME.loginwindow'"
+    runIt "defaults write '$LOGIN_PLIST' RunAtLoad -bool TRUE"
+    runIt "defaults write '$LOGIN_PLIST' ProgramArguments -array '$C_DIALOG' '--ontop' '--loginwindow' '--button1disabled' '--button1text' 'none' '--jsonfile' '$TRACKER_JSON'"
+    runIt "chmod ugo+r '$LOGIN_PLIST'"
     sleep 2
     touch "$TRACKER_RUNNING"
-    launchctl load -S LoginWindow "$LOGIN_PLIST"
+    runIt "launchctl load -S LoginWindow '$LOGIN_PLIST'"
     sleep 2
 
     # with a PreStage enrolment, there will be no Apps installed, so we won't allow skipping
@@ -950,12 +952,13 @@ case $1 in
     fi
     # Block Self Service macOS Onboarding for TEMP_ADMIN account, we want to use Self Service to
     #  help with installing, and as such can't have Self Service macOS Onboarding getting in the way
-    runIt "sudo -u '$TEMP_ADMIN' mkdir -p '/Users/$TEMP_ADMIN/Library/Preferences'"
-    runIt "sudo -u '$TEMP_ADMIN' defaults write '/Users/$TEMP_ADMIN/Library/Preferences/com.jamfsoftware.selfservice.mac.plist' 'com.jamfsoftware.selfservice.onboardingcomplete' -bool TRUE"
-    runIt "sudo -u '$TEMP_ADMIN' defaults write '/Users/$TEMP_ADMIN/Library/Preferences/com.jamfsoftware.selfserviceplus.plist' 'com.jamfsoftware.selfservice.onboardingcomplete' -bool TRUE"
-    runIt "chown '$TEMP_ADMIN' /Users/$TEMP_ADMIN/Library/Preferences/com.jamfsoftware.selfservice*"
+    TEMP_ADMIN_HOME="$( dscl . read "/Users/$TEMP_ADMIN" NFSHomeDirectory | awk -F ': ' '{ print $NF }' )"
+    runIt "sudo -u '$TEMP_ADMIN' mkdir -p '$TEMP_ADMIN_HOME/Library/Preferences'"
+    runIt "sudo -u '$TEMP_ADMIN' defaults write '$TEMP_ADMIN_HOME/Library/Preferences/com.jamfsoftware.selfservice.mac.plist' 'com.jamfsoftware.selfservice.onboardingcomplete' -bool TRUE"
+    runIt "sudo -u '$TEMP_ADMIN' defaults write '$TEMP_ADMIN_HOME/Library/Preferences/com.jamfsoftware.selfserviceplus.plist' 'com.jamfsoftware.selfservice.onboardingcomplete' -bool TRUE"
+    runIt "chown '$TEMP_ADMIN' $TEMP_ADMIN_HOME/Library/Preferences/com.jamfsoftware.selfservice*"
     
-    sPlist="/Users/$TEMP_ADMIN/Library/Preferences/com.apple.SetupAssistant.plist"
+    sPlist="$TEMP_ADMIN_HOME/Library/Preferences/com.apple.SetupAssistant.plist"
     sOS="$(sw_vers --productVersion)"
     sBuild="$(sw_vers --buildVersion)"
     
@@ -1652,6 +1655,7 @@ case $1 in
   infoBox done
   COMMAND_FILE="/tmp/finished-$$"
   touch "$COMMAND_FILE"
+  chmod ugo+r "$COMMAND_FILE"
   activateLoop() {
    while [ -e "$COMMAND_FILE" ]; do
     echo "activate:" >> "$COMMAND_FILE"
@@ -1726,6 +1730,8 @@ case $1 in
   fi
   logIt "Removing: $CLEANUP_FILES"
   runIt "rm -rf $CLEANUP_FILES"
+  chmod go-rwx "$LIB/Logs/$DEFAULTS_NAME-"*
+  chgrp admin "$LIB/Logs/$DEFAULTS_NAME-"*
   logIt "For possible compliance requirement, one more Recon"
   runIt "'$C_JAMF' recon"
  ;;
