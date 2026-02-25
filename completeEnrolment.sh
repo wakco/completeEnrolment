@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.43"
+VERSION="1.44"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -134,14 +134,18 @@ errorIt() {
  exit $1
 }
 
+# defaultRead ConfigProfileSetting CheckOnceOrWait
+# - ConfigProfileSetting is the setting in the config profiles to look up
+# - CheckOnceOrWait, true or false (default false)
 defaultRead() {
- local myAttempts=1
  local defaultResult=""
- while [ "$defaultResult" = "" ] && [ $myAttempts -lt 11 ]; do
+ local checkOnce=${2:-false}
+ for (( i = 1; i < 11 ; i++ )); do
   defaultResult="$( defaults read "$DEFAULTS_FILE" "$1" 2>/dev/null )"
-  echo "$(date) - (Attempt #$myAttempts) Reading Preference $1: $defaultResult" >> "$LOG_FILE"
-  ((myAttempts++))
-  if [ "$defaultResult" = "" ] && [ $myAttempts -lt 11 ]; then
+  echo "$(date) - (Attempt #$i) Reading Preference $1: $defaultResult" >> "$LOG_FILE"
+  if [ "$defaultResult" != "" ] || [ -e "$DEFAULTS_FILE" ] && $checkOnce ; then
+   break
+  elif [ $i -lt 10 ] ; then
    sleep 30
   fi
  done
@@ -149,7 +153,7 @@ defaultRead() {
 }
 
 defaultReadBool() {
- if [ "$( defaultRead $1 )" = "1" ]; then
+ if [ "$( defaultRead $1 ${2:-false} )" = "1" ]; then
   echo "true"
  else
   echo "false"
@@ -433,7 +437,7 @@ trackIt() {
    track update statustext "Paused"
   ;;
   *)
-   if $( defaultReadBool testBefore ); then
+   if $( defaultReadBool testBefore true ); then
     testIt 1 $3 $4 $5
     if [ $? -eq 0 ]; then
      return 0
@@ -466,7 +470,7 @@ trackIt() {
    if [ "$GITHUBAPI" != "" ]; then
     MANAGED_OPTIONS+=" $GITHUBAPI"
    fi
-   if $( defaultReadBool forceInstall ); then
+   if $( defaultReadBool forceInstall true ); then
     MANAGED_OPTIONS+=" INSTALL=force"
    fi
    runIt "$C_INSTALL $2 $MANAGED_OPTIONS"
@@ -611,11 +615,11 @@ addAdmin() {
 
 # MARK: Load Admin Defaults
 loadDefaults() {
- TEMP_ADMIN="${"$( defaultRead tempAdmin )":-"setup_admin"}"
- TEMP_NAME="${"$( defaultRead tempName )":-"Setup Admin"}"
- LAPS_ADMIN="${"$( defaultRead lapsAdmin )":-"laps_admin"}"
- LAPS_NAME="${"$( defaultRead lapsName )":-"LAPS Admin"}"
- ADMIN_ICON="${"$( defaultRead adminPicture )":-"--no-picture"}"
+ TEMP_ADMIN="${"$( defaultRead tempAdmin false )":-"setup_admin"}"
+ TEMP_NAME="${"$( defaultRead tempName false )":-"Setup Admin"}"
+ LAPS_ADMIN="${"$( defaultRead lapsAdmin false )":-"laps_admin"}"
+ LAPS_NAME="${"$( defaultRead lapsName false )":-"LAPS Admin"}"
+ ADMIN_ICON="${"$( defaultRead adminPicture false )":-"--no-picture"}"
  if [ "$ADMIN_ICON" != "--no-picture" ]; then
   ADMIN_ICON="--picture '$ADMIN_ICON'"
  fi
@@ -646,8 +650,8 @@ done
 
 # MARK: Load common settings
 
-PER_APP=${"$( defaultRead perAPP )":-"5"}
-DIALOG_ICON="${"$( defaultRead dialogIcon )":-"caution"}"
+PER_APP=${"$( defaultRead perAPP true )":-"5"}
+DIALOG_ICON="${"$( defaultRead dialogIcon true )":-"caution"}"
 TRACKER_COMMAND="/tmp/completeEnrolment.DIALOG_COMMANDS.log"
 INSTALLS_JSON="$PREFS/completeEnrolment-installs.json"
 TRACKER_JSON="$PREFS/completeEnrolment-tracker.json"
@@ -705,14 +709,14 @@ case $1 in
   #  our "tracker", although plutil can create an empty json, it can't insert into it, incorrectly
   #  mistaking the file to be in another format (OpenStep), so we'll just add an item with an echo
   echo "{\"thisfile\":\"This file was created by completeEnrolment $VERSION\"}" > "$TRACKER_JSON"
-  track string title "Welcome to ${"$( defaultRead corpName )":-"The Service Desk"}"
+  track string title "Welcome to ${"$( defaultRead corpName true )":-"The Service Desk"}"
   track string message "Please wait while this computer is set up...<br>Log File available at: $LOG_FILE"
   track string icon "$DIALOG_ICON"
   track string commandfile "$TRACKER_COMMAND"
   track string position "bottom"
   track string height "90%"
   track string width "90%"
-  if $( defaultReadBool appearance ); then
+  if $( defaultReadBool appearance true ); then
    track string appearance dark
   else
    track string appearance light
@@ -723,15 +727,15 @@ case $1 in
   track string liststyle "compact"
   track bool allowSkip true
   plutil -replace displaylog -string "$LOG_FILE" "$LOG_JSON"
-  plutil -replace loghistory -integer 1000 "$LOG_JSON"
+  plutil -replace loghistory -integer 10000 "$LOG_JSON"
 
   # MARK: set time
-  TIME_ZONE="${"$( defaultRead systemTimeZone )":-"$( systemsetup -gettimezone | awk "{print \$NF}" )"}"
+  TIME_ZONE="${"$( defaultRead systemTimeZone true )":-"$( systemsetup -gettimezone | awk "{print \$NF}" )"}"
   trackNow "Setting Time Zone" \
    command "/usr/sbin/systemsetup -settimezone '$TIME_ZONE'" \
    result '' 'SF=clock.badge.exclamationmark'
   sleep 2
-  SYSTEM_TIME_SERVER="${"$( defaultRead systemTimeServer )":-"$( systemsetup -getnetworktimeserver | awk "{print \$NF}" )"}"
+  SYSTEM_TIME_SERVER="${"$( defaultRead systemTimeServer true )":-"$( systemsetup -getnetworktimeserver | awk "{print \$NF}" )"}"
   trackNow "Setting Network Time Sync server" \
    command "/usr/sbin/systemsetup -setnetworktimeserver '$SYSTEM_TIME_SERVER'" \
    result '' 'SF=clock.badge.questionmark'
@@ -757,14 +761,14 @@ case $1 in
   
   # MARK: Install initial files
   trackNow "Installing Initial Files" \
-   policy "${"$( defaultRead policyInitialFiles )":-"installInitialFiles"}" \
+   policy "${"$( defaultRead policyInitialFiles true )":-"installInitialFiles"}" \
    file "$DIALOG_ICON" 'SF=square.and.arrow.down.on.square'
 
   # MARK: Install Installomator
   # This can be either the custom version from this repository, or the script that installs the
   # official version.
   trackNow "Installing Installomator" \
-   policy "${"$( defaultRead policyInstallomator )":-"installInstallomator"}" \
+   policy "${"$( defaultRead policyInstallomator true )":-"installInstallomator"}" \
    file "/usr/local/Installomator/Installomator.sh" 'SF=square.and.arrow.down.badge.checkmark'
   
   # MARK: Install swiftDialog
@@ -891,7 +895,7 @@ case $1 in
     # MARK: Unbind Active Directory
     #  (if bound)
     if [ "$( ls /Library/Preferences/OpenDirectory/Configurations/Active\ Directory | wc -l )" -gt 0 ]; then
-     POLICY_UNBIND="$( defaultRead policyADUnbind )"
+     POLICY_UNBIND="$( defaultRead policyADUnbind true )"
      if [ "$POLICY_UNBIND" = "" ] || [ "$POLICY_UNBIND" = "force" ]; then
       COMMAND="command"
       POLICY_UNBIND="/usr/sbin/dsconfigad -leave -force"
@@ -906,7 +910,7 @@ case $1 in
     # MARK: Set the Computer Name
     COMPUTER_NAME="$( scutil --get ComputerName )"
     trackNow "Setting computer name" \
-     policy "${"$( defaultRead policyComputerName )":-"fixComputerName"}" \
+     policy "${"$( defaultRead policyComputerName true )":-"fixComputerName"}" \
      test '[ "$COMPUTER_NAME" != "$( scutil --get ComputerName )" ]' 'SF=lock.desktopcomputer'
     infoBox
     
@@ -929,7 +933,7 @@ case $1 in
     # MARK: Wait for admin account details
     trackNow "Waiting for additional dynamic configuration" \
      secure "sleep 30" "Checking for initial administrator account details" \
-     test "defaultRead tempAdmin" 'SF=person.badge.clock'
+     test "defaultRead tempAdmin false" 'SF=person.badge.clock'
 
     # Read the Admin account details
     loadDefaults
@@ -1048,7 +1052,7 @@ case $1 in
     runIt "'$C_ENROLMENT' process >> /dev/null 2>&1"
    ;;
   esac
-  if $( defaultReadBool emailJamfLog ); then
+  if $( defaultReadBool emailJamfLog false ); then
    # cannot use errorIt to exit here, since 1. this was request, as such, not actually an error, and
    #  2. because errorIt will also cleanUp, which is definitely not wanted at this stage.
    logIt "Exiting with an error signal as requested in the configuration."
@@ -1117,7 +1121,7 @@ case $1 in
   #  if we just started up (i.e. if whoLogged = TEMP_ADMIN)
   if [ "$( whoLogged )" = "$TEMP_ADMIN" ]; then
    track update status success
-   if ! $( defaultReadBool finderKeep ); then
+   if ! $( defaultReadBool finderKeep false ); then
     launchctl bootout gui/$( id -u $( whoLogged ) )/com.apple.Finder
    fi
    sleep 2
@@ -1151,7 +1155,7 @@ case $1 in
   fi
   sleep 1
 
-  JAMF_ACCOUNTS="$( curl -s "${JAMF_URL}api/v2/local-admin-password/$( defaultRead managementID )/accounts" \
+  JAMF_ACCOUNTS="$( curl -s "${JAMF_URL}api/v2/local-admin-password/$( defaultRead managementID true )/accounts" \
    -H "accept: application/json" -H "Authorization: Bearer $JAMF_AUTH_TOKEN" )"
   logIt "Checking for JMF account in:\n$JAMF_ACCOUNTS\n"
   for (( i = 0; i < $( readJSON "$JAMF_ACCOUNTS" "totalCount" ); i++ )); do
@@ -1170,7 +1174,7 @@ case $1 in
   fi
   sleep 1
 
-  JAMF_PASS="$( readJSON "$( curl -s "${JAMF_URL}api/v2/local-admin-password/$( defaultRead managementID )/account/$JAMF_ADMIN/$JAMF_GUID/password" \
+  JAMF_PASS="$( readJSON "$( curl -s "${JAMF_URL}api/v2/local-admin-password/$( defaultRead managementID true )/account/$JAMF_ADMIN/$JAMF_GUID/password" \
    -H "accept: application/json" -H "Authorization: Bearer $JAMF_AUTH_TOKEN" )" "password" )"
   if [ -z "$JAMF_PASS" ]; then
    "$C_DIALOG" --ontop --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account password from Jamf Pro API"
@@ -1521,10 +1525,10 @@ case $1 in
    EMAIL_BODY+="<b>Installed:</b> $SUCCESS_COUNT\n"
    EMAIL_BODY+="<b>Failed:</b> $FAILED_COUNT\n"
    EMAIL_BODY+="<b>Completed Tasks:</b> $FULLSUCCESS_COUNT\n"
-   LOG_URL="${JAMF_URL}computers.html?id=$( defaultRead jssID )&o=r&v=history"
+   LOG_URL="${JAMF_URL}computers.html?id=$( defaultRead jssID true )&o=r&v=history"
    EMAIL_BODY+="\nThe initial log is available at: <a href=\"$LOG_URL\">$LOG_URL</a>,\n"
    EMAIL_BODY+="with full logs available in the /Library/Logs folder on the computer.\n"
-   EMAIL_BODY+="Please review the logs and contact ${"$( defaultRead serviceName )":-"Service Management"} if any assistance is required.\n\n\n"
+   EMAIL_BODY+="Please review the logs and contact ${"$( defaultRead serviceName true )":-"Service Management"} if any assistance is required.\n\n\n"
 
    # MARK: Build table
    track integer currentitem 0
@@ -1540,13 +1544,13 @@ case $1 in
    
    # MARK: Final preparation of email
    trackupdate statustext "Identifying where to email..."
-   EMAIL_FROM="${"$( defaultRead emailFrom )":-""}"
-   EMAIL_TO="${"$( defaultRead emailTo )":-""}"
-   EMAIL_ERR="${"$( defaultRead emailErrors )":-""}"
-   EMAIL_BCC="${"$( defaultRead emailBCC )":-""}"
-   EMAIL_HIDDEN="${"$( defaultRead emailBCCFiller )":-"$EMAIL_FROM"}"
-   EMAIL_SMTP="${"$( defaultRead emailSMTP )":-""}"
-   EMAIL_AUTH="${"$( defaultRead emailAUTH )":-"$EMAIL_FROM"}"
+   EMAIL_FROM="${"$( defaultRead emailFrom true )":-""}"
+   EMAIL_TO="${"$( defaultRead emailTo true )":-""}"
+   EMAIL_ERR="${"$( defaultRead emailErrors true )":-""}"
+   EMAIL_BCC="${"$( defaultRead emailBCC true )":-""}"
+   EMAIL_HIDDEN="${"$( defaultRead emailBCCFiller true )":-"$EMAIL_FROM"}"
+   EMAIL_SMTP="${"$( defaultRead emailSMTP true )":-""}"
+   EMAIL_AUTH="${"$( defaultRead emailAUTH true )":-"$EMAIL_FROM"}"
    logIt "Configured Email Details (if being sent):\nTo be sent via: $EMAIL_SMTP\nFrom: $EMAIL_FROM\nTo: $EMAIL_TO\nError: $EMAIL_ERR\nBCC: $EMAIL_BCC\nHidden by: $EMAIL_HIDDEN\nSubject: $EMAIL_SUBJECT\n\n$EMAIL_BODY\n"
 
    # To help with formatting, and mail client compatibility, html encode all spaces and equals,
@@ -1615,8 +1619,8 @@ case $1 in
 
   # MARK: Connect identidy provider
   #  such as binding to active directory, or setup first user
-  trackNow "${"$( defaultRead policyADBindName )":-"Perform Last Steps"}" \
-   policy "${"$( defaultRead policyADBind )":-"adBind"}" \
+  trackNow "${"$( defaultRead policyADBindName false )":-"Perform Last Steps"}" \
+   policy "${"$( defaultRead policyADBind false )":-"adBind"}" \
    result '' 'SF=person.text.rectangle'
   
   # MARK: One more recon
@@ -1697,7 +1701,7 @@ case $1 in
    ;|
    ^2)
     logIt "Restarting the Finder"
-    if ! $( defaultReadBool finderKeep ); then
+    if ! $( defaultReadBool finderKeep true ); then
      whoId=$( id -u $( whoLogged ) )
      launchctl asuser $whoId launchctl bootstrap gui/$whoId /System/Library/LaunchAgents/com.apple.Finder.plist
      sleep 0.1
@@ -1710,7 +1714,7 @@ case $1 in
  # MARK: Clean up
  cleanUp)
   # A clean up routine
-  if ${$( defaultReadBool tempKeep ):-false}; then
+  if ${$( defaultReadBool tempKeep true ):-false}; then
    logIt "Keeping $TEMP_ADMIN as requested."
   else
    TEMP_ADMIN_HOME="$( dscl . read "/Users/$TEMP_ADMIN" NFSHomeDirectory | awk -F ': ' '{ print $NF }' )"
