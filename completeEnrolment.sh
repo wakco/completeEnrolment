@@ -1052,7 +1052,7 @@ case $1 in
     runIt "'$C_ENROLMENT' process >> /dev/null 2>&1"
    ;;
   esac
-  if $( defaultReadBool emailJamfLog false ); then
+  if $( defaultReadBool emailJamfLog true ); then
    # cannot use errorIt to exit here, since 1. this was request, as such, not actually an error, and
    #  2. because errorIt will also cleanUp, which is definitely not wanted at this stage.
    logIt "Exiting with an error signal as requested in the configuration."
@@ -1121,7 +1121,7 @@ case $1 in
   #  if we just started up (i.e. if whoLogged = TEMP_ADMIN)
   if [ "$( whoLogged )" = "$TEMP_ADMIN" ]; then
    track update status success
-   if ! $( defaultReadBool finderKeep false ); then
+   if ! $( defaultReadBool finderKeep true ); then
     launchctl bootout gui/$( id -u $( whoLogged ) )/com.apple.Finder
    fi
    sleep 2
