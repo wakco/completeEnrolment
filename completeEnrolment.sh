@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.46"
+VERSION="1.47"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -328,11 +328,11 @@ track() {
   new)
    THE_STRING="$( echo "$2" | tr -d '"' )"
    logIt "Adding task: $THE_STRING"
-   eval "plutil -insert listitem -json \"{\\\"title\\\":\\\"$THE_STRING\\\"}\" -append '$TRACKER_JSON'"
    if [ -e "$TRACKER_RUNNING" ]; then
     echo "listitem: add, title: $THE_STRING" >> "$TRACKER_COMMAND"
     sleep 0.1
    fi
+   eval "plutil -insert listitem -json \"{\\\"title\\\":\\\"$THE_STRING\\\"}\" -append '$TRACKER_JSON'"
    TRACKER_ITEM=${$( jq 'currentitem' ):--1}
    ((TRACKER_ITEM++))
    track integer currentitem $TRACKER_ITEM
