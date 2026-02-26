@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.45"
+VERSION="1.46"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -235,19 +235,31 @@ infoAdd() {
  INFOBOX+="$1  <br><br>"
 }
 helpAdd() {
- HELPBOX+="$1  <br><br>"
+ HELPBOX+="$1  <br>$2"
 }
 bothAdd() {
  infoAdd "$1"
- helpAdd "$( echo "$1" | sed 's/\ <br>//g' )"
+ helpAdd "$( echo "$1" | sed 's/\ <br>//g' )"  "$2"
 }
 infoBox() {
  INFOBOX=""
  HELPBOX=""
- helpAdd "The **Show Log/Tasks...** button will switch between log and task list views, and reset the screen in the process."
- helpAdd "---"
- helpAdd "$SCRIPTNAME v$VERSION, using swiftDialog v$( "$C_DIALOG" --version )"
- bothAdd "**macOS $( sw_vers -productversion )** on  <br>$( scutil --get ComputerName )  <br>(S/N: $SERIALNUMBER)"
+ helpAdd "The **Show Log/Tasks...** button will switch between log and task list views, and reset the screen in the process." '<br>'
+ helpAdd "---" '<br>'
+ bothAdd "**macOS $( sw_vers -productversion )** on  <br>$( scutil --get ComputerName )  <br>(S/N: $SERIALNUMBER)" '<br>'
+ helpAdd "| Software | Version |"
+ helpAdd "|-|-|"
+ helpAdd "| $SCRIPTNAME | $VERSION |"
+ if [ -e "$C_INSTALL" ]; then
+  helpAdd "| Installomator | $( "$C_INSTALL" version ) |"
+ fi
+ if [ -e "$C_MKUSER" ]; then
+  helpAdd "| mkuser | $( "$C_MKUSER" -v | awk '/mkuser: Version/ { print $3 }' ) |"
+ fi
+ if [ -e "$C_DIALOG" ]; then
+  helpAdd "| swiftDialog | $( "$C_DIALOG" --version ) |"
+ fi
+ HELPBOX+='<br>'
  if [ "$( jq 'startdate' )" != "" ]; then
   bothAdd "**Started:**  <br>$( jq startdate )"
  fi
@@ -730,7 +742,7 @@ case $1 in
   track string liststyle "compact"
   track bool allowSkip true
   plutil -replace displaylog -string "$LOG_FILE" "$LOG_JSON"
-  plutil -replace loghistory -integer 5000 "$LOG_JSON"
+  plutil -replace loghistory -integer 2500 "$LOG_JSON"
 
   # MARK: set time
   TIME_ZONE="${"$( defaultRead systemTimeZone true )":-"$( systemsetup -gettimezone | awk "{print \$NF}" )"}"
@@ -1134,7 +1146,8 @@ case $1 in
   if [ "$( pgrep "Dialog" )" = "" ]; then
    runIt "'$C_ENROLMENT' startDialog >> /dev/null 2>&1 &"
   fi
-  sleep 2
+  # Allow time for the dialog to open
+  sleep 10
   
   # MARK: Start Self Service
   SELF_SERVICE_NAME="$( echo "$( selfService )" | sed -E 's=.*/(.*)\.app$=\1=' )"
@@ -1730,8 +1743,6 @@ case $1 in
   fi
   logIt "Removing: $CLEANUP_FILES"
   runIt "rm -rf $CLEANUP_FILES"
-  chmod go-rwx "$LIB/Logs/$DEFAULTS_NAME-"*
-  chgrp admin "$LIB/Logs/$DEFAULTS_NAME-"*
   logIt "For possible compliance requirement, one more Recon"
   runIt "'$C_JAMF' recon"
  ;;
