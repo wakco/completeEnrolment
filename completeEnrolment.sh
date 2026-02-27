@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.47"
+VERSION="1.48"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -251,10 +251,10 @@ infoBox() {
  helpAdd "|-|-|"
  helpAdd "| $SCRIPTNAME | $VERSION |"
  if [ -e "$C_INSTALL" ]; then
-  helpAdd "| Installomator | $( "$C_INSTALL" version ) |"
+  helpAdd "| Installomator | $( awk -F '"' '/VERSION=/ { print $2 }' "$C_INSTALL" ) |"
  fi
  if [ -e "$C_MKUSER" ]; then
-  helpAdd "| mkuser | $( "$C_MKUSER" -v | awk '/mkuser: Version/ { print $3 }' ) |"
+  helpAdd "| mkuser | $( awk -F "'" '/MKUSER_VERSION=/ { print $2 }' "$C_MKUSER" ) |"
  fi
  if [ -e "$C_DIALOG" ]; then
   helpAdd "| swiftDialog | $( "$C_DIALOG" --version ) |"
