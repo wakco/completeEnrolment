@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.48"
+VERSION="1.49"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 
@@ -102,12 +102,21 @@ chmod ugo+r "$LOG_FILE"
 
 # MARK: Functions
 
+# dialogSend is intended to handle making sure the appropriate wait time is applied, and just
+#  in case, lets empty the $TRACKER_COMMAND file as well.
+dialogSend() {
+ echo "$1" >> "$TRACKER_COMMAND"
+ sleep 0.1
+ echo > "$TRACKER_COMMAND"
+ sleep 0.1
+}
+
 selfService() {
  # Finding the configured and installed Self Service app has become a little bit complicated.
  # Jamf recommended the mdfind command, but the guy forgot about the original Self Service app.
- # The ls command is simpler,but is really a last resort since the app might be renamed, so we
- # Read check what is configured first, failing that try mdfind, limiting it to /Applications,
- # and if that still fails, fall back to anything matching: /Applications/*Self Service*
+ # The ls command is simpler, but is really a last resort since the app might be renamed, so we
+ #  re-check what is configured first, failing that try mdfind, limiting it to /Applications,
+ #  and if that still fails, fall back to anything matching: /Applications/*Self Service*
  SSMETHODS=(
   "defaults read /Library/Preferences/com.jamfsoftware.jamf.plist self_service_plus_path 2>/dev/null"
   "defaults read /Library/Preferences/com.jamfsoftware.jamf.plist self_service_app_path 2>/dev/null"
@@ -302,10 +311,8 @@ infoBox() {
  plutil -replace infobox -string "$INFOBOX" "$LOG_JSON"
  plutil -replace helpmessage -string "$HELPBOX" "$LOG_JSON"
  if [ ! -e "$TRACKER_RUNNING" ]; then
-  echo "infobox: $INFOBOX" >> "$TRACKER_COMMAND"
-  sleep 0.1
-  echo "helpmessage: $HELPBOX" >> "$TRACKER_COMMAND"
-  sleep 0.1
+  dialogSend "infobox: $INFOBOX"
+  dialogSend "helpmessage: $HELPBOX"
  fi
  logIt "=== Infobox:\n$INFOBOX"
  logIt "=== Help Message:\n$HELPBOX"
@@ -314,23 +321,20 @@ infoBox() {
 # MARK: track
 track() {
  local THE_STRING="$( echo "$3" | tr -d '"' )"
- echo "activate:" >> "$TRACKER_COMMAND"
- sleep 0.1
+ dialogSend "activate:"
  case $1 in
   bool|integer|string)
    logIt "Updating $2 of type $1 to: $THE_STRING"
    eval "plutil -replace $2 -$1 \"$THE_STRING\" '$TRACKER_JSON'"
    if [ -e "$TRACKER_RUNNING" ]; then
-    echo "$2: $THE_STRING" >> "$TRACKER_COMMAND"
-    sleep 0.1
+    dialogSend "$2: $THE_STRING"
    fi
   ;;
   new)
    THE_STRING="$( echo "$2" | tr -d '"' )"
    logIt "Adding task: $THE_STRING"
    if [ -e "$TRACKER_RUNNING" ]; then
-    echo "listitem: add, title: $THE_STRING" >> "$TRACKER_COMMAND"
-    sleep 0.1
+    dialogSend "listitem: add, title: $THE_STRING"
    fi
    eval "plutil -insert listitem -json \"{\\\"title\\\":\\\"$THE_STRING\\\"}\" -append '$TRACKER_JSON'"
    TRACKER_ITEM=${$( jq 'currentitem' ):--1}
@@ -343,8 +347,7 @@ track() {
    logIt "Updating $2 of task #$TRACKER_ITEM \"$( jq 'listitem[.currentitem].title' )\" to: $THE_STRING"
    eval "plutil -replace listitem.$TRACKER_ITEM.$2 -string \"$THE_STRING\" '$TRACKER_JSON'"
    if [ -e "$TRACKER_RUNNING" ]; then
-    echo "listitem: index: $TRACKER_ITEM, $2: $THE_STRING" >> "$TRACKER_COMMAND"
-    sleep 0.1
+    dialogSend "listitem: index: $TRACKER_ITEM, $2: $THE_STRING"
    fi
   ;;
  esac
@@ -742,7 +745,7 @@ case $1 in
   track string liststyle "compact"
   track bool allowSkip true
   plutil -replace displaylog -string "$LOG_FILE" "$LOG_JSON"
-  plutil -replace loghistory -integer 2500 "$LOG_JSON"
+  plutil -replace loghistory -integer 2000 "$LOG_JSON"
 
   # MARK: set time
   TIME_ZONE="${"$( defaultRead systemTimeZone true )":-"$( systemsetup -gettimezone | awk "{print \$NF}" )"}"
@@ -1263,7 +1266,7 @@ case $1 in
     logIt "Additional Config Files to load: $LIST_FILES"
     if [ "$( jq 'listitem[.trackitem].status' )" != "success" ]; then
      plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loading task list(s)..." "$TRACKER_JSON"
-     echo "listitem: index: $( jq 'trackitem' ), statustext: Loading task list(s)..." >> "$TRACKER_COMMAND"
+     dialogSend "listitem: index: $( jq 'trackitem' ), statustext: Loading task list(s)..."
     fi
     sleep 0.1
     for LIST_FILE in ${(@f)LIST_FILES} ; do
@@ -1317,8 +1320,7 @@ case $1 in
     # MARK: Load Installs
     # Cheating by using TRACKER_START to update the Task List loading entry
     plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loading tasks..." "$TRACKER_JSON"
-    echo "listitem: index: $( jq 'trackitem' ), statustext: Loading tasks..." >> "$TRACKER_COMMAND"
-    sleep 0.1
+    dialogSend "listitem: index: $( jq 'trackitem' ), statustext: Loading tasks..."
     until [ $( jq 'installCount' ) -ge $( listRead 'installs' ) ]; do
      TASKSLOADING="**Loading Install Task:** $(($( jq 'installCount' )+1))"
      infoBox
@@ -1409,11 +1411,9 @@ case $1 in
      sleep 1
     
      plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loaded" "$TRACKER_JSON"
-     echo "listitem: index: $( jq 'trackitem' ), statustext: Loaded" >> "$TRACKER_COMMAND"
-     sleep 0.1
+     dialogSend "listitem: index: $( jq 'trackitem' ), statustext: Loaded"
      plutil -replace listitem.$( jq 'trackitem' ).status -string "success" "$TRACKER_JSON"
-     echo "listitem: index: $( jq 'trackitem' ), status: success" >> "$TRACKER_COMMAND"
-     sleep 0.1
+     dialogSend "listitem: index: $( jq 'trackitem' ), status: success"
     fi
     
     # MARK: Process software installs
@@ -1688,8 +1688,7 @@ case $1 in
    ;;
    *)
     logIt "Removing the blurscreen"
-    echo "blurscreen: disable" >> "$TRACKER_COMMAND"
-    sleep 0.1
+    dialogSend "blurscreen: disable"
    ;|
    2)
     logIt "Opening Migration Assistant"
