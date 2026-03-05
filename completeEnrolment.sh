@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.50"
+VERSION="1.51"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -109,7 +109,7 @@ chmod ugo+r "$LOG_FILE"
 dialogSend() {
  logIt "Sending: $1" 1
  echo "$1" >> "$TRACKER_COMMAND"
- sleep 0.1
+ sleep 0.2
  echo > "$TRACKER_COMMAND"
  sleep 0.1
 }
