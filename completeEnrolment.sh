@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.51"
+VERSION="1.52"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -1316,9 +1316,8 @@ case $1 in
     done
     if [ "$( jq 'listitem[.trackitem].status' )" != "success" ]; then
      plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Config Profile(s) loaded. Loading Tasks..." "$TRACKER_JSON"
-     echo "listitem: index: $( jq 'trackitem' ), statustext: Config Profile(s) loaded. Loading Tasks..." >> "$TRACKER_COMMAND"
+     dialogSend "listitem: index: $( jq 'trackitem' ), statustext: Config Profile(s) loaded. Loading Tasks..."
     fi
-    sleep 1
     
     track integer startitem $(($( jq 'currentitem' )+1))
     
@@ -1326,9 +1325,8 @@ case $1 in
     if [ "$( jq 'listitem[.trackitem].status' )" != "success" ]; then
      track integer 'installCount' 0
      plutil -replace listitem.$( jq 'trackitem' ).status -string "wait" "$TRACKER_JSON"
-     echo "listitem: index: $( jq 'trackitem' ), status: wait" >> "$TRACKER_COMMAND"
+     dialogSend "listitem: index: $( jq 'trackitem' ), status: wait"
     fi
-    sleep 1
 
     infoBox
     
@@ -1400,8 +1398,7 @@ case $1 in
 
     if [ "$( jq 'listitem[.trackitem].status' )" != "success" ]; then
      plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Inserting Pause & Inventory Update..." "$TRACKER_JSON"
-     echo "listitem: index: $( jq 'trackitem' ), statustext: Inserting Pause & Inventory Update..." >> "$TRACKER_COMMAND"
-     sleep 1
+     dialogSend "listitem: index: $( jq 'trackitem' ), statustext: Inserting Pause & Inventory Update..."
 
      # MARK: Add Pause & Inventory
      trackNew "Pause for 30 seconds"
@@ -1722,7 +1719,7 @@ case $1 in
    ;|
    *)
     logIt "Closing the log viewer/task list"
-    echo "quit:" >> "$TRACKER_COMMAND"
+    dialogSend "quit:"
     until [ "$( pgrep "Dialog" )" = "" ]; do
      sleep 1
     done
