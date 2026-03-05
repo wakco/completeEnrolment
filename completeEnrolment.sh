@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.52"
+VERSION="1.53"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -336,7 +336,7 @@ track() {
  case $1 in
   bool|integer|string)
    logIt "Updating $2 of type $1 to: $THE_STRING" 1
-   eval "plutil -replace $2 -$1 \"$THE_STRING\" '$TRACKER_JSON'"
+   eval "plutil -replace $2 -$1 '$THE_STRING' '$TRACKER_JSON'"
    if [ -e "$TRACKER_RUNNING" ]; then
     dialogSend "$2: $THE_STRING"
    fi
@@ -347,7 +347,7 @@ track() {
    if [ -e "$TRACKER_RUNNING" ]; then
     dialogSend "listitem: add, title: $THE_STRING"
    fi
-   eval "plutil -insert listitem -json \"{\\\"title\\\":\\\"$THE_STRING\\\"}\" -append '$TRACKER_JSON'"
+   eval "plutil -insert listitem -json '{\"title\":\"$THE_STRING\"}' -append '$TRACKER_JSON'"
    TRACKER_ITEM=${$( jq 'currentitem' ):--1}
    ((TRACKER_ITEM++))
    track integer currentitem $TRACKER_ITEM
@@ -356,7 +356,7 @@ track() {
   update)
    TRACKER_ITEM=${$( jq 'currentitem' ):-0}
    logIt "Updating $2 of task #$TRACKER_ITEM \"$( jq 'listitem[.currentitem].title' )\" to: $THE_STRING" 1
-   eval "plutil -replace listitem.$TRACKER_ITEM.$2 -string \"$THE_STRING\" '$TRACKER_JSON'"
+   eval "plutil -replace listitem.$TRACKER_ITEM.$2 -string '$THE_STRING' '$TRACKER_JSON'"
    if [ -e "$TRACKER_RUNNING" ]; then
     dialogSend "listitem: index: $TRACKER_ITEM, $2: $THE_STRING"
    fi
