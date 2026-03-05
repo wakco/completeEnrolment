@@ -1,9 +1,11 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.49"
+VERSION="1.50"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
+# Time to reduce some of the logging
+DEBUG=0
 
 # MARK: Commands
 # For anything outside /bin /usr/bin, /sbin, /usr/sbin
@@ -105,6 +107,7 @@ chmod ugo+r "$LOG_FILE"
 # dialogSend is intended to handle making sure the appropriate wait time is applied, and just
 #  in case, lets empty the $TRACKER_COMMAND file as well.
 dialogSend() {
+ logIt "Sending: $1" 1
  echo "$1" >> "$TRACKER_COMMAND"
  sleep 0.1
  echo > "$TRACKER_COMMAND"
@@ -134,7 +137,10 @@ selfService() {
 }
 
 logIt() {
- echo "$(date) - $@" 2>&1 | tee -a "$LOG_FILE"
+ DEBUG_LEVEL=${2:-0}
+ if [ $DEBUG -ge $DEBUG_LEVEL ]; then
+  echo "$(date) - $@" 2>&1 | tee -a "$LOG_FILE"
+ fi
 }
 logIt "###################### completeEnrolment $VERSION started with $1, and $( whoLogged ) is the current console user"
 
@@ -186,7 +192,12 @@ readSaved() {
 runIt() {
  THE_RETURN="$( eval "$1" 2>&1 )"
  THE_RESULT=$?
- echo "$(date) --- Executed '${2:-"$1"}' which returned signal $THE_RESULT and:\n$THE_RETURN" | tee -a "$LOG_FILE"
+ DEBUG_LEVEL=${3:-0}
+ if [ $DEBUG -ge $DEBUG_LEVEL ]; then
+  echo "$(date) --- Executed '${2:-"$1"}' which returned signal $THE_RESULT and:\n$THE_RETURN" | tee -a "$LOG_FILE"
+ else
+  echo "$THE_RETURN"
+ fi
  return $THE_RESULT
 }
 
@@ -314,8 +325,8 @@ infoBox() {
   dialogSend "infobox: $INFOBOX"
   dialogSend "helpmessage: $HELPBOX"
  fi
- logIt "=== Infobox:\n$INFOBOX"
- logIt "=== Help Message:\n$HELPBOX"
+ logIt "=== Infobox:\n$INFOBOX" 1
+ logIt "=== Help Message:\n$HELPBOX" 1
 }
 
 # MARK: track
@@ -324,7 +335,7 @@ track() {
  dialogSend "activate:"
  case $1 in
   bool|integer|string)
-   logIt "Updating $2 of type $1 to: $THE_STRING"
+   logIt "Updating $2 of type $1 to: $THE_STRING" 1
    eval "plutil -replace $2 -$1 \"$THE_STRING\" '$TRACKER_JSON'"
    if [ -e "$TRACKER_RUNNING" ]; then
     dialogSend "$2: $THE_STRING"
@@ -340,11 +351,11 @@ track() {
    TRACKER_ITEM=${$( jq 'currentitem' ):--1}
    ((TRACKER_ITEM++))
    track integer currentitem $TRACKER_ITEM
-   logIt "Added task #$TRACKER_ITEM: $THE_STRING"
+   logIt "Added task #$TRACKER_ITEM: $THE_STRING" 1
   ;;
   update)
    TRACKER_ITEM=${$( jq 'currentitem' ):-0}
-   logIt "Updating $2 of task #$TRACKER_ITEM \"$( jq 'listitem[.currentitem].title' )\" to: $THE_STRING"
+   logIt "Updating $2 of task #$TRACKER_ITEM \"$( jq 'listitem[.currentitem].title' )\" to: $THE_STRING" 1
    eval "plutil -replace listitem.$TRACKER_ITEM.$2 -string \"$THE_STRING\" '$TRACKER_JSON'"
    if [ -e "$TRACKER_RUNNING" ]; then
     dialogSend "listitem: index: $TRACKER_ITEM, $2: $THE_STRING"
@@ -379,7 +390,7 @@ testIt() {
   ;|
   appstore|teamid)
    if [ "$( eval "ls -d '$3'" 2>/dev/null | wc -l )" -gt 0 ]; then
-    CHECKAPP="$( runIt "spctl -a -vv '$3'" )"
+    CHECKAPP="$( runIt "spctl -a -vv '$3'" '' 1 )"
     THE_TEST=true
     case $CHECKAPP in
      *'Mac App Store'*)
@@ -812,25 +823,25 @@ case $1 in
     # Preparing the Login window
     # These settings fix a quirk with automated where the login window instead of having a
     # background, ends up displaying a grey background these two settings apparently repait that.
-    runIt "defaults write $LIB/Preferences/com.apple.loginwindow.plist AdminHostInfo -string HostName"
-    runIt "defaults write $LIB/Preferences/com.apple.loginwindow.plist SHOWFULLNAME -bool true"
+    runIt "defaults write $LIB/Preferences/com.apple.loginwindow.plist AdminHostInfo -string HostName" '' 1
+    runIt "defaults write $LIB/Preferences/com.apple.loginwindow.plist SHOWFULLNAME -bool true" '' 1
         
     # MARK: Restart the login window
-    runIt "/usr/bin/defaults write /Library/Preferences/com.apple.loginwindow.plist LoginwindowText 'Enrolled at $( /usr/bin/profiles status -type enrollment | /usr/bin/grep server | /usr/bin/awk -F '[:/]' '{ print $5 }' )\nplease wait while initial configuration is performed...\nThis computer will restart shortly.'"
+    runIt "/usr/bin/defaults write /Library/Preferences/com.apple.loginwindow.plist LoginwindowText 'Enrolled at $( /usr/bin/profiles status -type enrollment | /usr/bin/grep server | /usr/bin/awk -F '[:/]' '{ print $5 }' )\nplease wait while initial configuration is performed...\nThis computer will restart shortly.'" '' 1
     sleep 2
     
     # only kill the login window if it is already running
     if [ "$( pgrep -lu "root" "loginwindow" )" != "" ]; then
-     runIt "pkill loginwindow"
+     runIt "pkill loginwindow" '' 1
     fi
 
     # MARK: Start dialog on loginwindow
     sleep 2
-    runIt "defaults write '$LOGIN_PLIST' LimitLoadToSessionType -array 'LoginWindow'"
-    runIt "defaults write '$LOGIN_PLIST' Label '$DEFAULTS_NAME.loginwindow'"
-    runIt "defaults write '$LOGIN_PLIST' RunAtLoad -bool TRUE"
-    runIt "defaults write '$LOGIN_PLIST' ProgramArguments -array '$C_DIALOG' '--ontop' '--loginwindow' '--button1disabled' '--button1text' 'none' '--jsonfile' '$TRACKER_JSON'"
-    runIt "chmod ugo+r '$LOGIN_PLIST'"
+    runIt "defaults write '$LOGIN_PLIST' LimitLoadToSessionType -array 'LoginWindow'" '' 1
+    runIt "defaults write '$LOGIN_PLIST' Label '$DEFAULTS_NAME.loginwindow'" '' 1
+    runIt "defaults write '$LOGIN_PLIST' RunAtLoad -bool TRUE" '' 1
+    runIt "defaults write '$LOGIN_PLIST' ProgramArguments -array '$C_DIALOG' '--ontop' '--loginwindow' '--button1disabled' '--button1text' 'none' '--jsonfile' '$TRACKER_JSON'" '' 1
+    runIt "chmod ugo+r '$LOGIN_PLIST'" '' 1
     sleep 2
     touch "$TRACKER_RUNNING"
     runIt "launchctl load -S LoginWindow '$LOGIN_PLIST'"
@@ -968,10 +979,10 @@ case $1 in
     # Block Self Service macOS Onboarding for TEMP_ADMIN account, we want to use Self Service to
     #  help with installing, and as such can't have Self Service macOS Onboarding getting in the way
     TEMP_ADMIN_HOME="$( dscl . read "/Users/$TEMP_ADMIN" NFSHomeDirectory | awk -F ': ' '{ print $NF }' )"
-    runIt "sudo -u '$TEMP_ADMIN' mkdir -p '$TEMP_ADMIN_HOME/Library/Preferences'"
-    runIt "sudo -u '$TEMP_ADMIN' defaults write '$TEMP_ADMIN_HOME/Library/Preferences/com.jamfsoftware.selfservice.mac.plist' 'com.jamfsoftware.selfservice.onboardingcomplete' -bool TRUE"
-    runIt "sudo -u '$TEMP_ADMIN' defaults write '$TEMP_ADMIN_HOME/Library/Preferences/com.jamfsoftware.selfserviceplus.plist' 'com.jamfsoftware.selfservice.onboardingcomplete' -bool TRUE"
-    runIt "chown '$TEMP_ADMIN' $TEMP_ADMIN_HOME/Library/Preferences/com.jamfsoftware.selfservice*"
+    runIt "sudo -u '$TEMP_ADMIN' mkdir -p '$TEMP_ADMIN_HOME/Library/Preferences'" '' 1
+    runIt "sudo -u '$TEMP_ADMIN' defaults write '$TEMP_ADMIN_HOME/Library/Preferences/com.jamfsoftware.selfservice.mac.plist' 'com.jamfsoftware.selfservice.onboardingcomplete' -bool TRUE" '' 1
+    runIt "sudo -u '$TEMP_ADMIN' defaults write '$TEMP_ADMIN_HOME/Library/Preferences/com.jamfsoftware.selfserviceplus.plist' 'com.jamfsoftware.selfservice.onboardingcomplete' -bool TRUE" '' 1
+    runIt "chown '$TEMP_ADMIN' $TEMP_ADMIN_HOME/Library/Preferences/com.jamfsoftware.selfservice*" '' 1
     
     sPlist="$TEMP_ADMIN_HOME/Library/Preferences/com.apple.SetupAssistant.plist"
     sOS="$(sw_vers --productVersion)"
@@ -979,7 +990,7 @@ case $1 in
     
     setupTempAdmin() {
      for sItem in $sList; do
-      runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' '$sItem' $1"
+      runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' '$sItem' $1" '' 1
      done
     }
     
@@ -1034,11 +1045,11 @@ case $1 in
     )
     setupTempAdmin "-string '$sBuild'"
 
-    runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' 'LastPrivacyBundleVersion' -string 2"
-    runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' 'PreviousBuildVersion' -string 0"
-    runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' 'PreviousSystemVersion' -string 0"
-    runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' 'MiniBuddyLaunchReason' -integer 0"
-    runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' 'InitialAccountSetupDate' -date '$( date -j -v-1d "+%Y-%m-%dT%H:%M:%SZ" )'"
+    runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' 'LastPrivacyBundleVersion' -string 2" '' 1
+    runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' 'PreviousBuildVersion' -string 0" '' 1
+    runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' 'PreviousSystemVersion' -string 0" '' 1
+    runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' 'MiniBuddyLaunchReason' -integer 0" '' 1
+    runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' 'InitialAccountSetupDate' -date '$( date -j -v-1d "+%Y-%m-%dT%H:%M:%SZ" )'" '' 1
     unset sList sPlist sOS sBuilt
 
    ;|
@@ -1090,12 +1101,12 @@ case $1 in
    if $TRACKER; then
     touch "$TRACKER_RUNNING"
     logIt "Starting Progress Dialog..."
-    runIt "'$C_DIALOG' --jsonfile '$TRACKER_JSON' --button1text 'Show Log...'"
+    runIt "'$C_DIALOG' --jsonfile '$TRACKER_JSON' --button1text 'Show Log...'" '' 1
     rm -f "$TRACKER_RUNNING"
     TRACKER=false
    else
     logIt "Starting Log view Dialog..."
-    runIt "'$C_DIALOG' --jsonfile '$LOG_JSON' --button1text 'Show Tasks...'"
+    runIt "'$C_DIALOG' --jsonfile '$LOG_JSON' --button1text 'Show Tasks...'" '' 1
     TRACKER=true
    fi
   done
@@ -1112,7 +1123,7 @@ case $1 in
  # MARK: Process Installs
  process)
   # clear the LoginwindowText
-  runIt "/usr/bin/defaults delete /Library/Preferences/com.apple.loginwindow.plist LoginwindowText"
+  runIt "/usr/bin/defaults delete /Library/Preferences/com.apple.loginwindow.plist LoginwindowText" '' 1
   # update LOG_JSON to identify and follow the correct log file.
   plutil -replace displaylog -string "$LOG_FILE" "$LOG_JSON"
   track string message "Please wait while this computer is set up...<br>Log File available at: $LOG_FILE"
@@ -1153,10 +1164,14 @@ case $1 in
   sleep 10
   
   # MARK: Start Self Service
+  # Since Self Service is being opened for the first time, we will actually open, wait 10, close, wait 10, and open again,
+  #  so that Self Service has had a chance to fully load branding etc (first opens, especially of Self Service+, usually
+  #  fails to get all of the configured branding, and Self Service entries).
   SELF_SERVICE_NAME="$( echo "$( selfService )" | sed -E 's=.*/(.*)\.app$=\1=' )"
+  LAUNCH_SELF_SERVICE="launchctl asuser $( id -u $( whoLogged ) ) open -j -g -a '$( selfService )'"
   trackNow "Opening $SELF_SERVICE_NAME" \
-   secure "launchctl asuser $( id -u $( whoLogged ) ) open -j -g -a '$( selfService )' ; sleep 5" "$SELF_SERVICE_NAME may be required for some installs" \
-   test "[ \"\$( pgrep 'Self Servic(e|e\\+)\$' )\" != '' ]" 'SF=square.and.arrow.down.badge.checkmark'
+   secure "$LAUNCH_SELF_SERVICE ; sleep 10 ; launchctl asuser $( id -u $( whoLogged ) ) osascript -e 'tell app \"$SELF_SERVICE_NAME\" to quit' ; sleep 10 ; $LAUNCH_SELF_SERVICE ; sleep 10" \
+   "$SELF_SERVICE_NAME may be required for some installs" test "[ \"\$( pgrep 'Self Servic(e|e\\+)\$' )\" != '' ]" 'SF=square.and.arrow.down.badge.checkmark'
   sleep 2
 
   # MARK: Add/update JAMF ADMIN
@@ -1176,7 +1191,7 @@ case $1 in
 
   JAMF_ACCOUNTS="$( curl -s "${JAMF_URL}api/v2/local-admin-password/$( defaultRead managementID true )/accounts" \
    -H "accept: application/json" -H "Authorization: Bearer $JAMF_AUTH_TOKEN" )"
-  logIt "Checking for JMF account in:\n$JAMF_ACCOUNTS\n"
+  logIt "Checking for JMF account in:\n$JAMF_ACCOUNTS\n" 1
   for (( i = 0; i < $( readJSON "$JAMF_ACCOUNTS" "totalCount" ); i++ )); do
    if [ "$( readJSON "$JAMF_ACCOUNTS" "results[$i].userSource" )" = "JMF" ]; then
     JAMF_ADMIN="$( readJSON "$JAMF_ACCOUNTS" "results[$i].username" )"
@@ -1244,7 +1259,7 @@ case $1 in
     track update subtitle "Loading the task list(s) from config profile(s)"
     track integer trackitem ${$( jq 'currentitem' ):--1}
 
-    runIt "plutil -convert json -o '$INSTALLS_JSON' '$DEFAULTS_FILE'"
+    runIt "plutil -convert json -o '$INSTALLS_JSON' '$DEFAULTS_FILE'" '' 1
    fi
    THE_TITLE="${"$( /usr/bin/jq -Mr '.name // empty' "$INSTALLS_JSON" )":-"Main"}"
    trackNew "$THE_TITLE"
@@ -1254,7 +1269,7 @@ case $1 in
     track update status wait
     track update subtitle "$( /usr/bin/jq -Mr '.subtitle // empty' "$INSTALLS_JSON" )"
     if [ "$( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )" = "" ]; then
-     runIt "plutil -insert listitem -array '$INSTALLS_JSON'"
+     runIt "plutil -insert listitem -array '$INSTALLS_JSON'" '' 1
     fi
    fi
    if [ "$( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )" -gt 0 ]; then
@@ -1285,9 +1300,9 @@ case $1 in
        track update statustext "Loading $LIST_FILE..."
        for (( i = 0; i < $( plutil -extract 'installs' raw -o - "$LIST_FILE" 2>dev/null ); i++ )); do
         ADD_THIS="$( plutil -extract "installs.$i" json -o - "$LIST_FILE" )"
-        logIt "Adding: $ADD_THIS"
+        logIt "Adding: $ADD_THIS" 1
         plutil -insert 'installs' -json "$ADD_THIS" -append "$INSTALLS_JSON"
-        logIt "Installs: $( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )"
+        logIt "Installs: $( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )" 1
        done
        if [ $( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null ) -gt $CURRENT_INSTALLS ]; then
         track update statustext "Loaded"
@@ -1358,9 +1373,9 @@ case $1 in
          #  not so good when they are hosted, so downloading them to a folder and directing swiftDialog to
          #  the downloaded copy makes much more sense.
          ICON_NAME="$CACHE/$( basename "$THE_ICON" )"
-         runIt "curl -sL -o '$ICON_NAME' '$THE_ICON'"
+         runIt "curl -sL -o '$ICON_NAME' '$THE_ICON'" '' 1
          THE_ICON="$CACHE/icon-$( jq 'installCount' )-$( jq 'currentitem' ).png"
-         runIt "sips -s format png '$ICON_NAME' --out '$THE_ICON'"
+         runIt "sips -s format png '$ICON_NAME' --out '$THE_ICON'" '' 1
         ;&
         *)
          track update icon "$THE_ICON"
@@ -1576,25 +1591,25 @@ case $1 in
    
    if [ "$EMAIL_AUTH" != "" ] && [ "$( readSaved email )" != "" ] && [[ "$EMAIL_SMTP" = *":"* ]]; then
     if [ "$EMAIL_FROM" != "" ] && [ "$EMAIL_SUBJECT" != "" ]; then
-     logIt "From, and Subject is configured, attempting to send emails"
+     logIt "From, and Subject is configured, attempting to send emails" 1
      AUTH_SMTP=()
      if [ "$EMAIL_TO" != "" ]; then
-      logIt "To address configured"
+      logIt "To address configured" 1
       AUTH_SMTP+=( "--mail-rcpt" )
       AUTH_SMTP+=( "$EMAIL_TO" )
      fi
      if [ "$EMAIL_ERR" != "" ] && [ "$1" -gt 0 ]; then
-      logIt "Error address configured"
+      logIt "Error address configured" 1
       AUTH_SMTP+=( "--mail-rcpt" )
       AUTH_SMTP+=( "$EMAIL_ERR" )
      fi
      if [ "$EMAIL_BCC" != "" ]; then
-      logIt "BCC address configured"
+      logIt "BCC address configured" 1
       AUTH_SMTP+=( "--mail-rcpt" )
       AUTH_SMTP+=( "$EMAIL_BCC" )
      fi
      if [[ "$AUTH_SMTP" = *"--mail-rcpt"* ]]; then
-      logIt "Sending email"
+      logIt "Sending email" 1
       track update statustext "Sending email"
       mailSend "$EMAIL_FROM" "$EMAIL_HIDDEN" "$EMAIL_SUBJECT" "$EMAIL_BODY_ENCODED"
       MAIL_RESULT=$?
@@ -1602,7 +1617,7 @@ case $1 in
     fi
    else
     if [ "$EMAIL_FROM" != "" ] && [ "$EMAIL_SUBJECT" != "" ]; then
-     logIt "From, and Subject is configured, attempting to send emails"
+     logIt "From, and Subject is configured, attempting to send emails" 1
      if [ "$EMAIL_TO" != "" ]; then
       track update statustext "To address configured, sending email"
       mailSend "$EMAIL_FROM" "$EMAIL_TO" "$EMAIL_SUBJECT" "$EMAIL_BODY_ENCODED" "$EMAIL_HIDDEN"
@@ -1666,6 +1681,10 @@ case $1 in
 
   # MARK: Finished, what now?
   infoBox done
+  if [ "$( basename "$C_DIALOG" )" = "dialogcli" ]; then
+   # swiftDialog v3 required, otherwise the list or log will disappear
+   dialogSend "message: ### Installation has completed.  <br>This Log File is: $LOG_FILE  <br>More log files are available in: $( dirname "$LOG_FILE" )"
+  fi
   COMMAND_FILE="/tmp/finished-$$"
   touch "$COMMAND_FILE"
   chmod ugo+r "$COMMAND_FILE"
