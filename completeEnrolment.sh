@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.54"
+VERSION="1.55"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -329,6 +329,17 @@ infoBox() {
  logIt "=== Help Message:\n$HELPBOX" 1
 }
 
+encodeChars() {
+ case $2 in
+  json)
+   echo "$2" | sed -E 's/"/\\"/g'
+  ;;
+  comm)
+   echo "$2" | sed -E 's/:|,/;/g'
+  ;;
+ esac
+}
+
 # MARK: track
 track() {
  local THE_STRING="$3"
@@ -344,15 +355,99 @@ track() {
   new)
    local THE_STRING="$2"
    logIt "Adding task: $THE_STRING"
-   if [ -e "$TRACKER_RUNNING" ]; then
-    dialogSend "listitem: add, title: $THE_STRING"
+   DIALOG_SEND="listitem: add, title: $( encodeChars comm "$THE_STRING" )"
+   NEW_JSON='{"title":"'
+   NEW_JSON+="$( encodeChars json "$THE_STRING" )"
+   if [ "$TRACK_SUBTITLE" != "" ]; then
+    NEW_JSON+='","subtitle":"'
+    NEW_JSON+="$( encodeChars json "$TRACK_SUBTITLE" )"
+    DIALOG_SEND+=', subtitle: '
+    DIALOG_SEND+="$( encodeChars comm "$TRACK_SUBTITLE" )"
+    TRACK_SUBTITLE=""
    fi
-   plutil -insert "listitem" -json '{"title":"completeEnrolment placeholder"}' -append "$TRACKER_JSON"
+   if [ "$TRACK_SUBTITLETYPE" != "" ]; then
+    NEW_JSON+='","subtitletype":"'
+    NEW_JSON+="$TRACK_SUBTITLETYPE"
+    TRACK_SUBTITLETYPE=""
+   fi
+   if [ "$TRACK_SUPPLIEDSUBTITLE" != "" ]; then
+    NEW_JSON+='","suppliedsubtitle":"'
+    NEW_JSON+="$TRACK_SUPPLIEDSUBTITLE"
+    TRACK_SUPPLIEDSUBTITLE=""
+   fi
+   if [ "$TRACK_ICON" = "" ]; then
+    NEW_JSON+='","icon":"SF=questionmark.app'
+    DIALOG_SEND+=', icon: SF=questionmark.app'
+   else
+    NEW_JSON+='","icon":"'
+    NEW_JSON+="$TRACK_ICON"
+    DIALOG_SEND+=', icon: '
+    DIALOG_SEND+="$TRACK_ICON"
+    TRACK_ICON=""
+   fi
+   if [ "$TRACK_STATUS" = "" ]; then
+    NEW_JSON+='","status":"pending'
+    DIALOG_SEND+=', status: pending'
+   else
+    NEW_JSON+='","status":"'
+    NEW_JSON+="$TRACK_STATUS"
+    DIALOG_SEND+=', status: '
+    DIALOG_SEND+="$TRACK_STATUS"
+    TRACK_STATUS=""
+   fi
+   if [ "$TRACK_STATUSTEXT" != "" ]; then
+    NEW_JSON+='","statustext":"'
+    NEW_JSON+="$( encodeChars json "$TRACK_STATUSTEXT" )"
+    DIALOG_SEND+=', statustext: '
+    DIALOG_SEND+="$( encodeChars comm "$TRACK_STATUSTEXT" )"
+    TRACK_STATUSTEXT=""
+   fi
+   if [ "$TRACK_BACKUPTYPE" = "" ]; then
+    NEW_JSON+='","backuptype":"none'
+   else
+    NEW_JSON+='","backuptype":"'
+    NEW_JSON+="$TRACK_BACKUPTYPE"
+    TRACK_BACKUPTYPE=""
+   fi
+   if [ "$TRACK_BACKUPCOMMAND" != "" ]; then
+    NEW_JSON+='","backupcommand":"'
+    NEW_JSON+="$TRACK_BACKUPCOMMAND"
+    TRACK_BACKUPCOMMAND=""
+   fi
+   if [ "$TRACK_COMMAND" != "" ]; then
+    NEW_JSON+='","commandtype":"'
+    NEW_JSON+="$TRACK_COMMAND"
+    TRACK_COMMAND=""
+   fi
+   if [ "$TRACK_COMMANDTYPE" != "" ]; then
+    NEW_JSON+='","backupcommand":"'
+    NEW_JSON+="$TRACK_COMMANDTYPE"
+    TRACK_COMMANDTYPE=""
+   fi
+   if [ "$TRACK_SUCCESSTYPE" != "" ]; then
+    NEW_JSON+='","successtype":"'
+    NEW_JSON+="$TRACK_SUCCESSTYPE"
+    TRACK_SUCCESSTYPE=""
+   fi
+   if [ "$TRACK_SUCCESSTEST" != "" ]; then
+    NEW_JSON+='","successtest":"'
+    NEW_JSON+="$TRACK_SUCCESSTEST"
+    TRACK_SUCCESSTEST=""
+   fi
+   if [ "$TRACK_SUCCESSTEAM" != "" ]; then
+    NEW_JSON+='","successteam":"'
+    NEW_JSON+="$TRACK_SUCCESSTEAM"
+    TRACK_SUCCESSTEAM=""
+   fi
+   NEW_JSON+='"}'
+   if [ -e "$TRACKER_RUNNING" ]; then
+    dialogSend "$DIALOG_SEND"
+   fi
+   plutil -insert "listitem" -json "$NEW_JSON" -append "$TRACKER_JSON"
    TRACKER_ITEM=${$( jq 'currentitem' ):--1}
    ((TRACKER_ITEM++))
    track integer currentitem $TRACKER_ITEM
-   plutil -replace "listitem.$TRACKER_ITEM.title" -string "$THE_STRING" "$TRACKER_JSON"
-   logIt "Added task #$TRACKER_ITEM: $THE_STRING" 1
+   logIt "Added task #$TRACKER_ITEM: $DIALOG_SEND" 1
   ;;
   update)
    TRACKER_ITEM=${$( jq 'currentitem' ):-0}
@@ -450,6 +545,11 @@ trackIt() {
  if [ COUNT != "" ]; then
   THE_COUNT=" #$COUNT"
  fi
+ ITEM_ICON="$( jq 'listitem[.currentitem].icon' )"
+ if [ "$ITEM_ICON" != "" ]; then
+  track string overlayicon "$DIALOG_ICON"
+  track string icon "$ITEM_ICON"
+ fi
  case $3 in
   stamp)
    if [ "$RECON_DATE" = "" ]; then
@@ -525,7 +625,12 @@ trackIt() {
   ;;
  esac
  testIt $THE_RESULT $3 $4 $5
- return $?
+ TESTIT_RESULT=$?
+ if [ "$ITEM_ICON" != "" ]; then
+  track string icon "$DIALOG_ICON"
+  track string overlayicon none
+ fi
+ return $TESTIT_RESULT
 }
 
 # MARK: repeatIt
@@ -548,10 +653,24 @@ repeatIt() {
  fi
 }
 
+# MARK: trackStatus
+trackStatus() {
+ if [ "$( jq 'listitem[.currentitem+1].status' )" = "success" ]; then
+  track integer currentitem $(($( jq 'currentitem' )+1))
+  return 0
+ else
+  return 1
+ fi
+}
+
 # MARK: trackNew
 trackNew() {
  if [ "$( jq 'listitem[.currentitem+1].title' )" = "$1" ]; then
   track integer currentitem $(($( jq 'currentitem' )+1))
+  TRACK_ICON=""
+  TRACK_STATUSTEXT=""
+  TRACK_SUBTITLE=""
+  TRACK_STATUS=""
  else
   track new "$1"
  fi
@@ -563,44 +682,48 @@ trackNew() {
 #  status confirmation type: file)
 # MARK: trackNow
 trackNow() {
- trackNew "$1"
- if [ "$( jq 'listitem[.currentitem].status' )" = "success" ]; then
-  return 0
- else
-  local COMMAND_TYPE="$2"
-  local COMMAND_NOW="$3"
-  case $COMMAND_TYPE in
-   secure)
-    track update subtitle "$4"
-    shift
-   ;|
-   policy)
-    track update subtitle "Jamf Policy - $3"
-   ;|
-   install)
-    track update subtitle "Installomator Label - $3"
-   ;|
-   ^(policy|install))
-    track update subtitle "$3"
-   ;|
-   *)
-    local TEST_TYPE="$4"
-    local TEST_NOW="$5"
-    local TEST_TEAM=""
-    if [ "$TEST_TYPE" = "teamid" ]; then
-     TEST_TEAM="$6"
-     shift
-    fi
-    if [ "$6" != "" ]; then
-     track update icon "$6"
-    fi
-    repeatIt "$COMMAND_TYPE" "$COMMAND_NOW" "$TEST_TYPE" "$TEST_NOW" "$TEST_TEAM"
-   ;;
-  esac
+ if trackStatus; then
   infoBox
-  # Process error here?
-  return $THE_RESULT
+  return 0
  fi
+ local COMMAND_TYPE="$2"
+ case $COMMAND_TYPE in
+  secure)
+   TRACK_SUBTITLE="$4"
+   shift
+  ;|
+  policy)
+   TRACK_SUBTITLE="Jamf Policy - $3"
+  ;|
+  install)
+   TRACK_SUBTITLE="Installomator Label - $3"
+  ;|
+  ^(policy|install))
+   TRACK_SUBTITLE="$3"
+  ;|
+  *)
+   local COMMAND_NOW="$3"
+   local TEST_TYPE="$4"
+   local TEST_NOW="$5"
+   local TEST_TEAM=""
+   if [ "$TEST_TYPE" = "teamid" ]; then
+    TEST_TEAM="$6"
+    shift
+   fi
+   if [ "$6" != "" ]; then
+    TRACK_ICON="$6"
+   fi
+   trackNew "$1"
+   if [ "$( jq 'listitem[.currentitem].status' )" = "success" ]; then
+    return 0
+   else
+    repeatIt "$COMMAND_TYPE" "$COMMAND_NOW" "$TEST_TYPE" "$TEST_NOW" "$TEST_TEAM"
+   fi
+  ;;
+ esac
+ infoBox
+  # Process error here?
+ return $THE_RESULT
 }
 
 # MARK: addAdmin: update or add
@@ -876,10 +999,10 @@ case $1 in
     LOGIN_FOOTER+="can be used to manage Volume Owners (to fix Secure Tokens), in the event the login details for all of the above usernames are unknown:\n\n    fdesetup list  \n"
     LOGIN_FOOTER+="    sysadminctl -secureTokenOn <username> -password - -adminUser <admin> -adminPassword -  \n- _fdesetup_ lists all accounts with Secure Tokens.  \n"
     LOGIN_FOOTER+="- _sysadminctl_ creates the Secure Token after asking for the passwords of the _admin_ and _username_ accounts.  \n    - The _admin_ account must have a Secure Token."
+    TRACK_SUBTITLE="Manual (Re-)Enrolment requires login from a Volume Owner"
+    TRACK_STATUSTEXT="Waiting for successful login..."
+    TRACK_ICON='SF=person.fill.questionmark'
     trackNew "Login Required"
-    track update status pending
-    track update subtitle "Manual (Re-)Enrolment requires login from a Volume Owner"
-    track update statustext "Waiting for successful login..."
     while [ "$SECURE_ADMIN" = "" ]; do
      LOGIN_MESSAGE="$LOGIN_HEADER $( fdesetup list | cut -d ',' -f 1 | tr '\n' ' ' )  \n$TRY_AGAIN\n\n$LOGIN_FOOTER"
      if [ "$TRY_AGAIN" = "" ]; then
@@ -1229,12 +1352,11 @@ case $1 in
   
   # MARK: Skip install's? (for manual (re-)enrolment)
   if $( jq 'allowSkip' ); then
+   TRACK_ICON='SF=questionmark'
+   TRACK_STATUSTEXT="Asking..."
+   TRACK_SUBTITLE="Manual/re-enrolments can decide to skip installing Apps"
+   TRACK_STATUS="wait"
    trackNew "Install or Skip?"
-   track update icon 'SF=questionmark'
-   track update status pending
-   track update statustext "Asking..."
-   track update subtitle "Manual/re-enrolments can decide to skip installing Apps"
-   track update status wait
    "$C_DIALOG" --icon "$DIALOG_ICON" --ontop --timer 30 --title none --mini \
     --message "Install Applications?" --button1text "Continue" --button2text "Skip"
    INSTALL_TASKS=$?
@@ -1251,24 +1373,21 @@ case $1 in
    
    # MARK: Prepare Installs
 
-   trackNew "Task List"
-   if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
-    # need to track what has been done better
-    track update icon 'SF=checklist'
-    track update status pending
-    track update statustext "Loading..."
-    track update subtitle "Loading the task list(s) from config profile(s)"
+   if ! trackStatus; then
+    TRACK_ICON='SF=checklist'
+    TRACK_STATUSTEXT="Loading..."
+    TRACK_SUBTITLE="Loading the task list(s) from config profile(s)"
+    TRACK_STATUS="pending"
+    trackNew "Task List"
     track integer trackitem ${$( jq 'currentitem' ):--1}
-
     runIt "plutil -convert json -o '$INSTALLS_JSON' '$DEFAULTS_FILE'" '' 1
    fi
-   THE_TITLE="${"$( /usr/bin/jq -Mr '.name // empty' "$INSTALLS_JSON" )":-"Main"}"
-   trackNew "$THE_TITLE"
-   if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
-    LIST_ICON="${"$( plutil -extract 'taskIcon' raw -o - "$INSTALLS_JSON" )":-"SF=doc.text"}"
-    track update icon "$LIST_ICON"
-    track update status wait
-    track update subtitle "$( /usr/bin/jq -Mr '.subtitle // empty' "$INSTALLS_JSON" )"
+   if ! trackStatus; then
+    THE_TITLE="${"$( /usr/bin/jq -Mr '.name // empty' "$INSTALLS_JSON" )":-"Main"}"
+    TRACK_ICON="${"$( plutil -extract 'taskIcon' raw -o - "$INSTALLS_JSON" )":-"SF=doc.text"}"
+    TRACK_SUBTITLE="$( /usr/bin/jq -Mr '.subtitle // empty' "$INSTALLS_JSON" )"
+    TRACK_ICON="wait"
+    trackNew "$THE_TITLE"
     if [ "$( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )" = "" ]; then
      runIt "plutil -insert listitem -array '$INSTALLS_JSON'" '' 1
     fi
@@ -1292,13 +1411,12 @@ case $1 in
       THE_TITLE="${"$( plutil -extract 'name' raw -o - "$LIST_FILE" )":-"$( echo "$LIST_FILE" | sed -E "s=^$DEFAULTS_BASE-(.*)\.plist\$=\\1=" )"}"
       TASKSLOADING="**Loading Task List:**  <br>$THE_TITLE..."
       infoBox
-      trackNew "$THE_TITLE"
-      if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
-       track update subtitle "$( plutil -extract 'subtitle' raw -o - "$LIST_FILE" )"
-       LIST_ICON="${"$( plutil -extract 'taskIcon' raw -o - "$LIST_FILE" )":-"SF=doc.text"}"
-       track update icon "$LIST_ICON"
-       track update status wait
-       track update statustext "Loading $LIST_FILE..."
+      if ! trackStatus; then
+       TRACK_SUBTITLE="$( plutil -extract 'subtitle' raw -o - "$LIST_FILE" )"
+       TRACK_ICON="${"$( plutil -extract 'taskIcon' raw -o - "$LIST_FILE" )":-"SF=doc.text"}"
+       TRACK_STATUS="wait"
+       TRACK_STATUSTEXT="Loading $LIST_FILE..."
+       trackNew "$THE_TITLE"
        for (( i = 0; i < $( plutil -extract 'installs' raw -o - "$LIST_FILE" 2>dev/null ); i++ )); do
         ADD_THIS="$( plutil -extract "installs.$i" json -o - "$LIST_FILE" )"
         logIt "Adding: $ADD_THIS" 1
@@ -1340,56 +1458,47 @@ case $1 in
      infoBox
      # for each item in config profile
      if [ "$( listRead "installs.$( jq 'installCount' ).title" )" != "" ] && [ "$( listRead "installs.$( jq 'installCount' ).commandtype" )" != "" ] ; then
-      trackNew "$( listRead "installs.$( jq 'installCount' ).title" )"
-      if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
-       track update command "$( listRead "installs.$( jq 'installCount' ).command" )"
-       track update commandtype "$( listRead "installs.$( jq 'installCount' ).commandtype" )"
-       track update suppliedsubtitle "$( listRead "installs.$( jq 'installCount' ).subtitle" )"
-       SUBTITLE_TYPE="$( listRead "installs.$( jq 'installCount' ).subtitletype" )"
-       if [ "$SUBTITLE_TYPE" = "" ]; then
-        track update subtitletype command
-       else
-        track update subtitletype "$SUBTITLE_TYPE"
+      if ! trackStatus; then
+       TRACK_COMMAND="$( listRead "installs.$( jq 'installCount' ).command" )"
+       TRACK_COMMANDTYPE="$( listRead "installs.$( jq 'installCount' ).commandtype" )"
+       TRACK_SUPPLIEDSUBTITLE="$( listRead "installs.$( jq 'installCount' ).subtitle" )"
+       TRACK_SUBTITLETYPE="$( listRead "installs.$( jq 'installCount' ).subtitletype" )"
+       if [ "$TRACK_SUBTITLETYPE" = "" ]; then
+        TRACK_SUBTITLETYPE="command"
        fi
-       case "$( jq 'listitem[.currentitem].subtitletype' )" in
+       case "$TRACK_SUBTITLETYPE" in
         replace|secure)
-         track update subtitle "$( jq 'listitem[.currentitem].suppliedsubtitle' )"
+         TRACK_SUBTITLE="$( jq 'listitem[.currentitem].suppliedsubtitle' )"
         ;;
         command)
-         track update subtitle "$( subtitleType )"
+         TRACK_SUBTITLE="$( subtitleType )"
         ;;
         combine)
-         track update subtitle "$( jq 'listitem[.currentitem].suppliedsubtitle' ) - $( subtitleType )"
+         TRACK_SUBTITLE="$( jq 'listitem[.currentitem].suppliedsubtitle' ) - $( subtitleType )"
         ;;
        esac
-       track update successtype "$( listRead "installs.$( jq 'installCount' ).successtype" )"
-       track update successtest "$( listRead "installs.$( jq 'installCount' ).successtest" )"
-       track update successteam "$( listRead "installs.$( jq 'installCount' ).successteam" )"
-       THE_ICON="${"$( listRead "installs.$( jq 'installCount' ).icon" )":-"SF=questionmark.app.dashed"}"
-       case $THE_ICON; in
+       TRACK_SUCCESSTYPE="$( listRead "installs.$( jq 'installCount' ).successtype" )"
+       TRACK_SUCCESSTEST="$( listRead "installs.$( jq 'installCount' ).successtest" )"
+       TRACK_SUCCESSTEAM="$( listRead "installs.$( jq 'installCount' ).successteam" )"
+       TRACK_ICON="${"$( listRead "installs.$( jq 'installCount' ).icon" )":-"SF=questionmark.app.dashed"}"
+       case $TRACK_ICON; in
         http*)
          # Cache the icon locally, as scrolling the window causes swiftDialog to reload the icons, which is
          #  not so good when they are hosted, so downloading them to a folder and directing swiftDialog to
          #  the downloaded copy makes much more sense.
-         ICON_NAME="$CACHE/$( basename "$THE_ICON" )"
-         runIt "curl -sL -o '$ICON_NAME' '$THE_ICON'" '' 1
-         THE_ICON="$CACHE/icon-$( jq 'installCount' )-$( jq 'currentitem' ).png"
-         runIt "sips -s format png '$ICON_NAME' --out '$THE_ICON'" '' 1
-        ;&
-        *)
-         track update icon "$THE_ICON"
+         ICON_NAME="$CACHE/$( basename "$TRACK_ICON" )"
+         runIt "curl -sL -o '$ICON_NAME' '$TRACK_ICON'" '' 1
+         TRACK_ICON="$CACHE/icon-$( jq 'installCount' )-$( jq 'currentitem' ).png"
+         runIt "sips -s format png '$ICON_NAME' --out '$TRACK_ICON'" '' 1
         ;;
        esac
-       
-       THE_BACKUPTYPE="$( listRead "installs.$( jq 'installCount' ).backuptype" )"
-       if [ "$THE_BACKUPTYPE" = "" ]; then
-        track update backuptype 'none'
-       else
-        track update backuptype "$THE_BACKUPTYPE"
+       TRACK_BACKUPTYPE="$( listRead "installs.$( jq 'installCount' ).backuptype" )"
+       if [ "$TRACK_BACKUPTYPE" = "" ]; then
+        TRACK_BACKUPTYPE='none'
        fi
-       track update backupcommand "$( listRead "installs.$( jq 'installCount' ).backupcommand" )"
-       track update status pending
-       track update statustext "waiting for install..."
+       TRACK_BACKUPCOMMAND="$( listRead "installs.$( jq 'installCount' ).backupcommand" )"
+       TRACK_STATUSTEXT="waiting for install..."
+       trackNew "$( listRead "installs.$( jq 'installCount' ).title" )"
       fi
       infoBox
       track integer installCount $(($( jq 'installCount' )+1))
@@ -1402,22 +1511,22 @@ case $1 in
      dialogSend "listitem: index: $( jq 'trackitem' ), statustext: Inserting Pause & Inventory Update..."
 
      # MARK: Add Pause & Inventory
-     trackNew "Pause for 30 seconds"
-     if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
-      track update icon 'SF=pause.circle'
-      track update command "sleep 30"
-      track update commandtype none
-      track update subtitle "30 second pause for Managed & Self Service tasks"
-      track update successtype "pause"
+     if ! trackStatus; then
+      TRACK_ICON='SF=pause.circle'
+      TRACK_COMMAND="sleep 30"
+      TRACK_COMMANDTYPE="command"
+      TRACK_SUBTITLE="30 second pause for Managed & Self Service tasks"
+      TRACK_SUCCESSTYPE="pause"
+      trackNew "Pause for 30 seconds"
      fi
      sleep 1
-     trackNew "Inventory Update"
-     if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
-      track update icon 'SF=list.bullet.rectangle'
-      track update command "'$C_JAMF' recon"
-      track update commandtype command
-      track update subtitle "Updates inventory once every $PER_APP minutes"
-      track update successtype "stamp"
+     if ! trackStatus; then
+      TRACK_ICON='SF=list.bullet.rectangle'
+      TRACK_COMMAND="'$C_JAMF' recon"
+      TRACK_COMMANDTYPE="command"
+      TRACK_SUBTITLE="Updates inventory once every $PER_APP minutes"
+      TRACK_SUCCESSTYPE="stamp"
+      trackNew "Inventory Update"
      fi
      infoBox
 
@@ -1489,11 +1598,11 @@ case $1 in
   unset COUNT
 
   # MARK: Checking status
-  trackNew "Checking Status"
-  if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
-   track update icon 'SF=checklist'
-   track update subtitle "Counting the failed/successful installations"
-   track update status wait
+  if ! trackStatus; then
+   TRACK_ICON='SF=checklist'
+   TRACK_SUBTITLE="Counting the failed/successful installations"
+   TRACK_STATUS="wait"
+   trackNew "Checking Status"
 
    FULLSUCCESS_COUNT=0
    FAILED_COUNT=0
@@ -1522,11 +1631,10 @@ case $1 in
   
   # MARK: Prepare email
   # Time to send email to notify staff to sort out the next step (if necessary).
-  trackNew "Emailing Installation Status"
-  if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
-   track update icon 'SF=mail'
-   track update status wait
-   track update statustext "Building email content..."
+  if ! trackStatus; then
+   TRACK_ICON='SF=mail'
+   TRACK_STATUS="wait"
+   TRACK_STATUSTEXT="Building email content..."
    EMAIL_SUBJECT="$( scutil --get ComputerName ) "
    if [ $FAILED_COUNT -gt 0 ]; then
     EMAIL_SUBJECT+="completed (with some failures)"
@@ -1535,7 +1643,8 @@ case $1 in
    fi
    EMAIL_SUBJECT+=" $DEFAULTS_NAME from $JAMF_SERVER"
    # swift dialog has issues with :'s and ,'s in the command file
-   track update subtitle "$EMAIL_SUBJECT"
+   TRACK_SUBTITLE="$EMAIL_SUBJECT"
+   trackNew "Emailing Installation Status"
    EMAIL_SUBJECT="OSDNotification: $EMAIL_SUBJECT"
    EMAIL_BODY="$( system_profiler SPHardwareDataType | sed -E 's=(Hardware|Overview):(.*)$=\1:<br>=' | sed -E 's=^( *)(.*):(.*)$=<b>\2:</b>\3=' )\n\n"
    NETWORK_INTERFACE="$( route get "$JAMF_SERVER" | grep interface | awk '{ print $NF }' )"
