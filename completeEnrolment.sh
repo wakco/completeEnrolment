@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="1.55"
+VERSION="2.0"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -332,10 +332,10 @@ infoBox() {
 encodeChars() {
  case $2 in
   json)
-   echo "$2" | sed -E 's/"/\\"/g'
+   echo -n "$2" | sed -E 's/"/\\"/g'
   ;;
   comm)
-   echo "$2" | sed -E 's/:|,/;/g'
+   echo -n "$2" | tr ',' ';' | sed -E 's/: /; /g'
   ;;
  esac
 }
@@ -372,7 +372,7 @@ track() {
    fi
    if [ "$TRACK_SUPPLIEDSUBTITLE" != "" ]; then
     NEW_JSON+='","suppliedsubtitle":"'
-    NEW_JSON+="$TRACK_SUPPLIEDSUBTITLE"
+    NEW_JSON+="$( encodeChars json "$TRACK_SUPPLIEDSUBTITLE" )"
     TRACK_SUPPLIEDSUBTITLE=""
    fi
    if [ "$TRACK_ICON" = "" ]; then
@@ -380,9 +380,9 @@ track() {
     DIALOG_SEND+=', icon: SF=questionmark.app'
    else
     NEW_JSON+='","icon":"'
-    NEW_JSON+="$TRACK_ICON"
+    NEW_JSON+="$( encodeChars json "$TRACK_ICON" )"
     DIALOG_SEND+=', icon: '
-    DIALOG_SEND+="$TRACK_ICON"
+    DIALOG_SEND+="$( encodeChars comm "$TRACK_ICON" )"
     TRACK_ICON=""
    fi
    if [ "$TRACK_STATUS" = "" ]; then
@@ -390,7 +390,7 @@ track() {
     DIALOG_SEND+=', status: pending'
    else
     NEW_JSON+='","status":"'
-    NEW_JSON+="$TRACK_STATUS"
+    NEW_JSON+="$( encodeChars json "$TRACK_STATUS" )"
     DIALOG_SEND+=', status: '
     DIALOG_SEND+="$TRACK_STATUS"
     TRACK_STATUS=""
@@ -411,16 +411,16 @@ track() {
    fi
    if [ "$TRACK_BACKUPCOMMAND" != "" ]; then
     NEW_JSON+='","backupcommand":"'
-    NEW_JSON+="$TRACK_BACKUPCOMMAND"
+    NEW_JSON+="$( encodeChars json "$TRACK_BACKUPCOMMAND" )"
     TRACK_BACKUPCOMMAND=""
    fi
    if [ "$TRACK_COMMAND" != "" ]; then
-    NEW_JSON+='","commandtype":"'
-    NEW_JSON+="$TRACK_COMMAND"
+    NEW_JSON+='","command":"'
+    NEW_JSON+="$( encodeChars json "$TRACK_COMMAND" )"
     TRACK_COMMAND=""
    fi
    if [ "$TRACK_COMMANDTYPE" != "" ]; then
-    NEW_JSON+='","backupcommand":"'
+    NEW_JSON+='","commandtype":"'
     NEW_JSON+="$TRACK_COMMANDTYPE"
     TRACK_COMMANDTYPE=""
    fi
@@ -431,12 +431,12 @@ track() {
    fi
    if [ "$TRACK_SUCCESSTEST" != "" ]; then
     NEW_JSON+='","successtest":"'
-    NEW_JSON+="$TRACK_SUCCESSTEST"
+    NEW_JSON+="$( encodeChars json "$TRACK_SUCCESSTEST" )"
     TRACK_SUCCESSTEST=""
    fi
    if [ "$TRACK_SUCCESSTEAM" != "" ]; then
     NEW_JSON+='","successteam":"'
-    NEW_JSON+="$TRACK_SUCCESSTEAM"
+    NEW_JSON+="$( encodeChars json "$TRACK_SUCCESSTEAM" )"
     TRACK_SUCCESSTEAM=""
    fi
    NEW_JSON+='"}'
