@@ -15,6 +15,7 @@ C_INSTALL="/usr/local/Installomator/Installomator.sh"
 C_DIALOG="/Library/Application Support/Dialog/Dialog.app/Contents/MacOS/dialogcli"
 C_MKUSER="/usr/local/bin/mkuser"
 C_ENROLMENT="/usr/local/bin/completeEnrolment"
+C_JQ="/usr/bin/jq"
 
 checkDialog() {
  if [ ! -e "$C_DIALOG" ]; then
@@ -63,36 +64,12 @@ whoLogged() {
 # so we can use ^ for everything other than this matches in case statements
 setopt extended_glob
 
-# MARK: prefer jq
-if [ -e /usr/bin/jq ]; then
- # jq "alias"
- jq() {
-  /usr/bin/jq -eMr ".$1 // empty" "$TRACKER_JSON"
- }
- readJSON() {
-  printf '%s' "$1" | /usr/bin/jq -eMr ".$2 // empty"
- }
-else
- # makeshift jq replacement - From macOS 15 jq is built-in, so this will be removed by version 2
- jq() {
-  # JavaScript method can't do key[.otherkey], and doesn't output json format, so must be weary
-  #  currently only using listitem[.currentitem].key so we replace .currentitem here with its
-  #  contents using sed
-  if [[ "$1" == *'[.currentitem'* ]]; then
-   local GET_IT="$( echo "$1" | sed "s/\[\.currentitem/[$( jq 'currentitem' )/" )"
-  else
-   local GET_IT="$1"
-  fi
-  JSON="$( cat "$TRACKER_JSON" )" osascript -l 'JavaScript' \
-   -e 'const env = $.NSProcessInfo.processInfo.environment.objectForKey("JSON").js' \
-   -e "JSON.parse(env).$GET_IT"
- }
- readJSON() {
-  JSON="$1" osascript -l 'JavaScript' \
-   -e 'const env = $.NSProcessInfo.processInfo.environment.objectForKey("JSON").js' \
-   -e "JSON.parse(env).$2"
- }
-fi
+jq() {
+ "$C_JQ" -eMr ".$1 // empty" "$TRACKER_JSON"
+}
+readJSON() {
+ printf '%s' "$1" | "$C_JQ" -eMr ".$2 // empty"
+}
 
 # Log File
 
@@ -136,10 +113,19 @@ selfService() {
  done
 }
 
+debugLevel() {
+ case $DEBUG_LEVEL in
+  0) LOG_LEVEL="INFO" ;;
+  1) LOG_LEVEL="DEBUG" ;;
+  *) LOG_LEVEL="UNKNOWN-$DEBUG_LEVEL" ;;
+ esac
+ echo "$LOG_LEVEL"
+}
+
 logIt() {
  DEBUG_LEVEL=${2:-0}
  if [ $DEBUG -ge $DEBUG_LEVEL ]; then
-  echo "$(date) - $@" 2>&1 | tee -a "$LOG_FILE"
+  echo "$(date) $(debugLevel) - $1" 2>&1 | tee -a "$LOG_FILE"
  fi
 }
 logIt "###################### completeEnrolment $VERSION started with $1, and $( whoLogged ) is the current console user"
@@ -194,14 +180,13 @@ runIt() {
  THE_RESULT=$?
  DEBUG_LEVEL=${3:-0}
  if [ $DEBUG -ge $DEBUG_LEVEL ]; then
-  echo "$(date) --- Executed '${2:-"$1"}' which returned signal $THE_RESULT and:\n$THE_RETURN" | tee -a "$LOG_FILE"
+  echo "$(date) $(debugLevel) --- Executed '${2:-"$1"}' which returned signal $THE_RESULT and:\n$THE_RETURN" | tee -a "$LOG_FILE"
  else
   echo "$THE_RETURN"
  fi
  return $THE_RESULT
 }
 
-# MARK: mailSend
 mailSend() {
  if [ "$EMAIL_AUTH" != "" ] && [ "$( settingsPlist read email )" != "" ] && [[ "$EMAIL_SMTP" = *":"* ]]; then
   logIt "Attempting to send email with details:\nTo be sent via: $EMAIL_SMTP\nFrom: $1\nTo: ${AUTH_SMTP[@]}\nHidden by: $2\nSubject: $3\n\n$4\n"
@@ -226,7 +211,6 @@ mailSend() {
  fi
 }
 
-# MARK: subtitleType
 subtitleType() {
  case $( jq 'listitem[.currentitem].commandtype' ) in
   selfservice)
@@ -250,7 +234,6 @@ subtitleType() {
  esac
 }
 
-# MARK: infoBox
 infoAdd() {
  INFOBOX+="$1  <br><br>"
 }
@@ -317,47 +300,62 @@ infoBox() {
  if [ "$FULLSUCCESS_COUNT" != "" ]; then
   bothAdd "**Completed Tasks:** $FULLSUCCESS_COUNT"
  fi
- track string infobox "$INFOBOX"
- track string helpmessage "$HELPBOX"
- plutil -replace infobox -string "$INFOBOX" "$LOG_JSON"
- plutil -replace helpmessage -string "$HELPBOX" "$LOG_JSON"
- if [ ! -e "$TRACKER_RUNNING" ]; then
-  dialogSend "infobox: $INFOBOX"
-  dialogSend "helpmessage: $HELPBOX"
- fi
+ track string infobox "$INFOBOX" both
+ track string helpmessage "$HELPBOX" both
  logIt "=== Infobox:\n$INFOBOX" 1
  logIt "=== Help Message:\n$HELPBOX" 1
 }
 
 encodeChars() {
- case $2 in
+ case $1 in
   json)
    echo -n "$2" | sed -E 's/"/\\"/g'
   ;;
   comm)
    echo -n "$2" | tr ',' ';' | sed -E 's/: /; /g'
   ;;
+  *)
+   echo -n "$2"
+  ;;
  esac
 }
 
-# MARK: track
 track() {
  local THE_STRING="$3"
- dialogSend "activate:"
+ if [ -e "$TRACKER_RUNNING" ]; then
+  dialogSend "activate:"
+ fi
  case $1 in
   bool|integer|string)
    logIt "Updating $2 of type $1 to: $THE_STRING" 1
-   plutil -replace "$2" -$1 "$THE_STRING" "$TRACKER_JSON"
+   case $4 in
+    both|log)
+     logIt "Updating LOG dialog" 1
+     plutil -replace "$2" -$1 "$THE_STRING" "$LOG_JSON"
+    ;|
+    ^log)
+     logIt "Updating TRACKER dialog" 1
+     plutil -replace "$2" -$1 "$THE_STRING" "$TRACKER_JSON"
+    ;;
+   esac
    if [ -e "$TRACKER_RUNNING" ]; then
     dialogSend "$2: $THE_STRING"
    fi
   ;;
+  update)
+   TRACKER_ITEM=${$( jq 'currentitem' ):-0}
+   logIt "Updating $2 of task #$TRACKER_ITEM \"$( jq 'listitem[.currentitem].title' )\" to: $THE_STRING" 1
+   plutil -replace "listitem.$TRACKER_ITEM.$2" -string "$THE_STRING" "$TRACKER_JSON"
+   if [ -e "$TRACKER_RUNNING" ]; then
+    dialogSend "listitem: index: $TRACKER_ITEM, $2: $THE_STRING"
+   fi
+  ;;
   new)
-   local THE_STRING="$2"
-   logIt "Adding task: $THE_STRING"
-   DIALOG_SEND="listitem: add, title: $( encodeChars comm "$THE_STRING" )"
+   local TRACK_TITLE="$2"
+   logIt "Adding task: $TRACK_TITLE"
+   DIALOG_SEND="listitem: add, title: $( encodeChars comm "$TRACK_TITLE" )"
    NEW_JSON='{"title":"'
-   NEW_JSON+="$( encodeChars json "$THE_STRING" )"
+   NEW_JSON+="$( encodeChars json "$TRACK_TITLE" )"
    if [ "$TRACK_SUBTITLE" != "" ]; then
     NEW_JSON+='","subtitle":"'
     NEW_JSON+="$( encodeChars json "$TRACK_SUBTITLE" )"
@@ -447,20 +445,12 @@ track() {
    TRACKER_ITEM=${$( jq 'currentitem' ):--1}
    ((TRACKER_ITEM++))
    track integer currentitem $TRACKER_ITEM
-   logIt "Added task #$TRACKER_ITEM: $DIALOG_SEND" 1
-  ;;
-  update)
-   TRACKER_ITEM=${$( jq 'currentitem' ):-0}
-   logIt "Updating $2 of task #$TRACKER_ITEM \"$( jq 'listitem[.currentitem].title' )\" to: $THE_STRING" 1
-   plutil -replace "listitem.$TRACKER_ITEM.$2" -string "$THE_STRING" "$TRACKER_JSON"
-   if [ -e "$TRACKER_RUNNING" ]; then
-    dialogSend "listitem: index: $TRACKER_ITEM, $2: $THE_STRING"
-   fi
+   logIt "Added task #$TRACKER_ITEM:\n$( echo "$NEW_JSON" | "$C_JQ" )" 1
   ;;
  esac
 }
 
-# MARK: testIt, confirms task status
+# testIt, confirms task status
 testIt() {
  local RESPONSE
  local ERR_RESPONSE
@@ -537,7 +527,7 @@ testIt() {
  esac
 }
 
-# MARK: trackIt
+# trackIt
 # command type (command/policy/label), (shell command, jamf policy trigger, or Installomator label),
 #  status confirmation type, file to check for (for test types: file or teamid), Team ID
 trackIt() {
@@ -547,8 +537,8 @@ trackIt() {
  fi
  ITEM_ICON="$( jq 'listitem[.currentitem].icon' )"
  if [ "$ITEM_ICON" != "" ]; then
-  track string overlayicon "$DIALOG_ICON"
-  track string icon "$ITEM_ICON"
+  track string overlayicon "$DIALOG_ICON" both
+  track string icon "$ITEM_ICON" both
  fi
  case $3 in
   stamp)
@@ -627,13 +617,12 @@ trackIt() {
  testIt $THE_RESULT $3 $4 $5
  TESTIT_RESULT=$?
  if [ "$ITEM_ICON" != "" ]; then
-  track string icon "$DIALOG_ICON"
-  track string overlayicon none
+  track string icon "$DIALOG_ICON" both
+  track string overlayicon none both
  fi
  return $TESTIT_RESULT
 }
 
-# MARK: repeatIt
 repeatIt() {
  COUNT=1
  until [ $COUNT -gt $PER_APP ] || trackIt "$1" "$2" "$3" "$4" "$5"; do
@@ -653,7 +642,6 @@ repeatIt() {
  fi
 }
 
-# MARK: trackStatus
 trackStatus() {
  if [ "$( jq 'listitem[.currentitem+1].status' )" = "success" ]; then
   track integer currentitem $(($( jq 'currentitem' )+1))
@@ -663,7 +651,6 @@ trackStatus() {
  fi
 }
 
-# MARK: trackNew
 trackNew() {
  if [ "$( jq 'listitem[.currentitem+1].title' )" = "$1" ]; then
   track integer currentitem $(($( jq 'currentitem' )+1))
@@ -680,29 +667,32 @@ trackNew() {
 # title, command type (command/policy/label), (shell command, jamf policy trigger, or Installomator
 #  label), subtitle (where command type is secure), status confirmation type, file to check for (for
 #  status confirmation type: file)
-# MARK: trackNow
+    trackNow "Add this script to startup process" \
+     secure "defaults write '$STARTUP_PLIST' Label '$DEFAULTS_NAME' ; defaults write '$STARTUP_PLIST' RunAtLoad -bool TRUE ; defaults write '$STARTUP_PLIST' ProgramArguments -array '$C_ENROLMENT' ; chmod go+r '$STARTUP_PLIST'" "Creating '$STARTUP_PLIST'" \
+
 trackNow() {
  if trackStatus; then
   infoBox
   return 0
  fi
- local COMMAND_TYPE="$2"
- case $COMMAND_TYPE in
+ local COMMAND_TITLE="$1"
+ TRACK_COMMANDTYPE="$2"
+ TRACK_COMMAND="$3"
+ case $TRACK_COMMANDTYPE in
   secure)
    TRACK_SUBTITLE="$4"
    shift
   ;|
   policy)
-   TRACK_SUBTITLE="Jamf Policy - $3"
+   TRACK_SUBTITLE="Jamf Policy - $TRACK_COMMAND"
   ;|
   install)
-   TRACK_SUBTITLE="Installomator Label - $3"
+   TRACK_SUBTITLE="Installomator Label - $TRACK_COMMAND"
   ;|
   ^(policy|install))
-   TRACK_SUBTITLE="$3"
+   TRACK_SUBTITLE="$TRACK_COMMAND"
   ;|
   *)
-   local COMMAND_NOW="$3"
    local TEST_TYPE="$4"
    local TEST_NOW="$5"
    local TEST_TEAM=""
@@ -713,11 +703,11 @@ trackNow() {
    if [ "$6" != "" ]; then
     TRACK_ICON="$6"
    fi
-   trackNew "$1"
+   trackNew "$COMMAND_TITLE"
    if [ "$( jq 'listitem[.currentitem].status' )" = "success" ]; then
     return 0
    else
-    repeatIt "$COMMAND_TYPE" "$COMMAND_NOW" "$TEST_TYPE" "$TEST_NOW" "$TEST_TEAM"
+    repeatIt "$TRACK_COMMANDTYPE" "$TRACK_COMMAND" "$TEST_TYPE" "$TEST_NOW" "$TEST_TEAM"
    fi
   ;;
  esac
@@ -726,7 +716,7 @@ trackNow() {
  return $THE_RESULT
 }
 
-# MARK: addAdmin: update or add
+# addAdmin: update or add
 # $1 = username
 # $2 = password
 # $3 = name
@@ -831,7 +821,7 @@ case $1 in
   if [ "$4" = "" ]; then
    GITHUBAPI=""
   else
-   GITHUBAPI=" GITHUBAPI=$( echo "$4" | base64 -d )"
+   GITHUBAPI="GITHUBAPI=$( echo "$4" | base64 -d )"
    settingsPlist write github -string "$4"
   fi
   if [ "$5" = "" ]; then
@@ -879,8 +869,10 @@ case $1 in
   plutil -insert listitem -array "$TRACKER_JSON"
   track string liststyle "compact"
   track bool allowSkip true
-  plutil -replace displaylog -string "$LOG_FILE" "$LOG_JSON"
-  plutil -replace loghistory -integer 2000 "$LOG_JSON"
+  track string displaylog "$LOG_FILE" log
+#  plutil -replace displaylog -string "$LOG_FILE" "$LOG_JSON"
+  track integer loghistory 2000 log
+#  plutil -replace loghistory -integer 2000 "$LOG_JSON"
 
   # MARK: set time
   TIME_ZONE="${"$( defaultRead systemTimeZone true )":-"$( systemsetup -gettimezone | awk "{print \$NF}" )"}"
@@ -1241,7 +1233,7 @@ case $1 in
   if [ "$( settingsPlist read github )" = "" ]; then
    GITHUBAPI=""
   else
-   GITHUBAPI=" GITHUBAPI=$( readSaved github )"
+   GITHUBAPI="GITHUBAPI=$( readSaved github )"
   fi
  ;|
  # MARK: Process Installs
@@ -1249,9 +1241,10 @@ case $1 in
   # clear the LoginwindowText
   runIt "/usr/bin/defaults delete /Library/Preferences/com.apple.loginwindow.plist LoginwindowText" '' 1
   # update LOG_JSON to identify and follow the correct log file.
-  plutil -replace displaylog -string "$LOG_FILE" "$LOG_JSON"
-  track string message "Please wait while this computer is set up...<br>Log File available at: $LOG_FILE"
-  plutil -replace message -string "Please wait while this computer is set up...<br>Log File available at: $LOG_FILE" "$LOG_JSON"
+  track string displaylog "$LOG_FILE" log
+#  plutil -replace displaylog -string "$LOG_FILE" "$LOG_JSON"
+  track string message "Please wait while this computer is set up...<br>Log File available at: $LOG_FILE" both
+#  plutil -replace message -string "Please wait while this computer is set up...<br>Log File available at: $LOG_FILE" "$LOG_JSON"
   START_TIME=$( date "+%s" )
   infoBox
     
@@ -1383,9 +1376,9 @@ case $1 in
     runIt "plutil -convert json -o '$INSTALLS_JSON' '$DEFAULTS_FILE'" '' 1
    fi
    if ! trackStatus; then
-    THE_TITLE="${"$( /usr/bin/jq -Mr '.name // empty' "$INSTALLS_JSON" )":-"Main"}"
+    THE_TITLE="${"$( "$C_JQ" -Mr '.name // empty' "$INSTALLS_JSON" )":-"Main"}"
     TRACK_ICON="${"$( plutil -extract 'taskIcon' raw -o - "$INSTALLS_JSON" )":-"SF=doc.text"}"
-    TRACK_SUBTITLE="$( /usr/bin/jq -Mr '.subtitle // empty' "$INSTALLS_JSON" )"
+    TRACK_SUBTITLE="$( "$C_JQ" -Mr '.subtitle // empty' "$INSTALLS_JSON" )"
     TRACK_ICON="wait"
     trackNew "$THE_TITLE"
     if [ "$( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )" = "" ]; then
@@ -1814,6 +1807,8 @@ case $1 in
    ;;
    *)
     logIt "Removing the blurscreen"
+    track bool blurscreen false both
+#    plutil -replace blurscreen -bool false "$LOG_JSON"
     dialogSend "blurscreen: disable"
    ;|
    2)
