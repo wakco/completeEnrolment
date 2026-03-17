@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="2.0"
+VERSION="2.01"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -327,18 +327,24 @@ track() {
  fi
  case $1 in
   bool|integer|string)
-   logIt "Updating $2 of type $1 to: $THE_STRING" 1
+   local WHICH_DIALOG="${4:-"track"}"
+   local THE_DIALOG="TRACKER"
    case $4 in
+    both)
+     THE_DIALOG="BOTH"
+    ;|
+    log)
+     THE_DIALOG="LOG"
+    ;|
     both|log)
-     logIt "Updating LOG dialog" 1
      plutil -replace "$2" -$1 "$THE_STRING" "$LOG_JSON"
     ;|
     ^log)
-     logIt "Updating TRACKER dialog" 1
      plutil -replace "$2" -$1 "$THE_STRING" "$TRACKER_JSON"
     ;;
    esac
-   if [ -e "$TRACKER_RUNNING" ]; then
+   logIt "Updating $THE_DIALOG dialog(s), with $2 of type $1 to: $THE_STRING" 1
+   if [ -e "$TRACKER_RUNNING" ] || [[ "$4" == (both|log) ]]; then
     dialogSend "$2: $THE_STRING"
    fi
   ;;
@@ -676,41 +682,39 @@ trackNow() {
   return 0
  fi
  local COMMAND_TITLE="$1"
- TRACK_COMMANDTYPE="$2"
- TRACK_COMMAND="$3"
- case $TRACK_COMMANDTYPE in
+ local COMMAND_TYPE="$2"
+ local COMMAND_NOW="$3"
+ TRACK_SUBTITLE="$COMMAND_NOW"
+ TRACK_COMMANDTYPE="$COMMAND_TYPE"
+ TRACK_COMMAND="$COMMAND_NOW"
+ case $COMMAND_TYPE in
   secure)
    TRACK_SUBTITLE="$4"
    shift
-  ;|
+  ;;
   policy)
-   TRACK_SUBTITLE="Jamf Policy - $TRACK_COMMAND"
-  ;|
+   TRACK_SUBTITLE="Jamf Policy - $COMMAND_NOW"
+  ;;
   install)
-   TRACK_SUBTITLE="Installomator Label - $TRACK_COMMAND"
-  ;|
-  ^(policy|install))
-   TRACK_SUBTITLE="$TRACK_COMMAND"
-  ;|
-  *)
-   local TEST_TYPE="$4"
-   local TEST_NOW="$5"
-   local TEST_TEAM=""
-   if [ "$TEST_TYPE" = "teamid" ]; then
-    TEST_TEAM="$6"
-    shift
-   fi
-   if [ "$6" != "" ]; then
-    TRACK_ICON="$6"
-   fi
-   trackNew "$COMMAND_TITLE"
-   if [ "$( jq 'listitem[.currentitem].status' )" = "success" ]; then
-    return 0
-   else
-    repeatIt "$TRACK_COMMANDTYPE" "$TRACK_COMMAND" "$TEST_TYPE" "$TEST_NOW" "$TEST_TEAM"
-   fi
+   TRACK_SUBTITLE="Installomator Label - $COMMAND_NOW"
   ;;
  esac
+ local TEST_TYPE="$4"
+ local TEST_NOW="$5"
+ local TEST_TEAM=""
+ if [ "$TEST_TYPE" = "teamid" ]; then
+  TEST_TEAM="$6"
+  shift
+ fi
+ if [ "$6" != "" ]; then
+  TRACK_ICON="$6"
+ fi
+ trackNew "$COMMAND_TITLE"
+ if [ "$( jq 'listitem[.currentitem].status' )" = "success" ]; then
+  return 0
+ else
+  repeatIt "$COMMAND_TYPE" "$COMMAND_NOW" "$TEST_TYPE" "$TEST_NOW" "$TEST_TEAM"
+ fi
  infoBox
   # Process error here?
  return $THE_RESULT
