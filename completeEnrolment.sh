@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="2.02"
+VERSION="2.03"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -212,15 +212,15 @@ mailSend() {
 }
 
 subtitleType() {
- case $( jq 'listitem[.currentitem].commandtype' ) in
+ case $1 in
   selfservice)
-   echo "Self Service - $( jq 'listitem[.currentitem].command' )"
+   echo "Self Service - $2"
   ;;
   policy)
-   echo "Jamf Policy - $( jq 'listitem[.currentitem].command' )"
+   echo "Jamf Policy - $2"
   ;;
   install)
-   echo "Installomator Label - $( jq 'listitem[.currentitem].command' )"
+   echo "Installomator Label - $2"
   ;;
   jac)
    echo "Jamf App Installer"
@@ -229,7 +229,7 @@ subtitleType() {
    echo "Mac App Store"
   ;;
   *)
-   echo "$( jq 'listitem[.currentitem].command' )"
+   echo "$2"
   ;;
  esac
 }
@@ -1469,13 +1469,13 @@ case $1 in
        fi
        case "$TRACK_SUBTITLETYPE" in
         replace|secure)
-         TRACK_SUBTITLE="$( jq 'listitem[.currentitem].suppliedsubtitle' )"
+         TRACK_SUBTITLE="$TRACK_SUPPLIEDSUBTITLE"
         ;;
         command)
-         TRACK_SUBTITLE="$( subtitleType )"
+         TRACK_SUBTITLE="$( subtitleType "$TRACK_COMMANDTYPE" "$TRACK_COMMAND" )"
         ;;
         combine)
-         TRACK_SUBTITLE="$( jq 'listitem[.currentitem].suppliedsubtitle' ) - $( subtitleType )"
+         TRACK_SUBTITLE="$TRACK_SUPPLIEDSUBTITLE - $( subtitleType "$TRACK_COMMANDTYPE" "$TRACK_COMMAND" )"
         ;;
        esac
        TRACK_SUCCESSTYPE="$( listRead "installs.$( jq 'installCount' ).successtype" )"
@@ -1573,10 +1573,10 @@ case $1 in
           track update command "$( jq 'listitem[.currentitem].backupcommand' )"
           case "$( jq 'listitem[.currentitem].subtitletype' )" in
            replace|command)
-            track update subtitle "$( subtitleType )"
+            track update subtitle "$( subtitleType "$( jq 'listitem[.currentitem].commandtype' )" "$( jq 'listitem[.currentitem].command' )" )"
            ;;
            combine)
-            track update subtitle "$( jq 'listitem[.currentitem].suppliedsubtitle' ) - $( subtitleType )"
+            track update subtitle "$( jq 'listitem[.currentitem].suppliedsubtitle' ) - $( subtitleType "$( jq 'listitem[.currentitem].commandtype' )" "$( jq 'listitem[.currentitem].command' )" )"
            ;;
           esac
          fi
