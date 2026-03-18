@@ -247,7 +247,8 @@ bothAdd() {
 infoBox() {
  INFOBOX=""
  HELPBOX=""
- helpAdd "The **Show Log/Tasks...** button will switch between log and task list views, and reset the screen in the process." '<br>'
+ helpAdd "The **Show Log/Tasks...** button will switch between log / task views,"
+ helpAdd "and reset the screen in the process." '<br>'
  helpAdd "---" '<br>'
  bothAdd "**macOS $( sw_vers -productversion )** on  <br>$( scutil --get ComputerName )  <br>(S/N: $SERIALNUMBER)" '<br>'
  helpAdd "| Software | Version |"
