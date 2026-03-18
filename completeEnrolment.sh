@@ -625,7 +625,7 @@ trackIt() {
    fi
   ;|
   *)
-   for (( sc = $( jq 'listitem[.currentitem].progress' ) ; sc <= 78 ; sc = sc + 2 )); do
+   for (( sc = $( jq 'listitem[.currentitem].progress' ) ; sc < 80 ; sc = sc + 2 )); do
     track update progress $sc
     sleep 0.3
     # dialogSend uses 0.3 seconds and is executed twice, to allow for a second between updates and
