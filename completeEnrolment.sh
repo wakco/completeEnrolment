@@ -629,11 +629,12 @@ trackIt() {
     track update progress $sc
     sleep 0.3
     # dialogSend uses 0.3 seconds and is executed twice, to allow for a second between updates and
-    #  processing, leaves is with a max of 0.3 seconds again to wait.
+    #  processing, leaves us with a max of 0.3 seconds left to wait.
    done
   ;;
  esac
  track update progress 80
+ plutil -remove "listitem.$( jq '.currentitem' ).progress" "$TRACKER_JSON"
  testIt $THE_RESULT $3 $4 $5
  TESTIT_RESULT=$?
  if [[ "$ITEM_ICON" != ("$DIALOG_ICON"|) ]]; then
