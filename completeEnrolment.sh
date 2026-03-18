@@ -640,7 +640,6 @@ trackIt() {
   track string icon "$DIALOG_ICON" both
   track string overlayicon none both
  fi
- track update progress 100
  return $TESTIT_RESULT
 }
 
