@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="2.05"
+VERSION="2.06"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -573,7 +573,8 @@ trackIt() {
    sleep 1
   ;;
  esac
- track update status wait
+ track update status progress
+ track update progress 20
  case $1 in
   command|secure)
    if [[ "$3" != (date|pause|stamp) ]]; then
@@ -604,29 +605,42 @@ trackIt() {
   ;;
   jac)
    track update statustext "Waiting for 'Jamf App Installer' to install..."
+   track update progress 22
   ;|
   mas)
    track update statustext "Waiting for 'Mac App Store' to install..."
+   track update progress 22
   ;|
   selfservice)
    if [ "$( jq 'listitem[.currentitem].lastattempt' )" = "" ] || [ $( date "+%s" ) -ge $(($( jq 'listitem[.currentitem].lastattempt' )+$PER_APP*$PER_APP*60)) ]; then
     track update statustext "Asking Self Service to execute..."
+    track update progress 22
     runIt "launchctl asuser $( id -u $( whoLogged ) ) open -j -g -a '$( selfService )' -u '$2'"
+    track update progress 28
     track update lastattempt "$( date "+%s" )"
+    track update progress 30
    else
     track update statustext "Waiting for 'Self Service' to execute..."
+    track update progress 22
    fi
   ;|
   *)
-   sleep 30
+   for (( sc = $( jq 'listitem[.currentitem].progress' ) ; sc <= 78 ; sc = sc + 2 )); do
+    track update progress $sc
+    sleep 0.3
+    # dialogSend uses 0.3 seconds and is executed twice, to allow for a second between updates and
+    #  processing, leaves is with a max of 0.3 seconds again to wait.
+   done
   ;;
  esac
+ track update progress 80
  testIt $THE_RESULT $3 $4 $5
  TESTIT_RESULT=$?
  if [[ "$ITEM_ICON" != ("$DIALOG_ICON"|) ]]; then
   track string icon "$DIALOG_ICON" both
   track string overlayicon none both
  fi
+ track update progress 100
  return $TESTIT_RESULT
 }
 
