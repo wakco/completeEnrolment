@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="2.01"
+VERSION="2.02"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -868,7 +868,11 @@ case $1 in
   else
    track string appearance light
   fi
-  track bool blurscreen true
+  if [ $DEBUG -gt 0 ]; then
+   track bool blurscreen false
+  else
+   track bool blurscreen true
+  fi
   ditto "$TRACKER_JSON" "$LOG_JSON"
   plutil -insert listitem -array "$TRACKER_JSON"
   track string liststyle "compact"
