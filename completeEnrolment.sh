@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="2.04"
+VERSION="2.05"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -542,7 +542,7 @@ trackIt() {
   THE_COUNT=" #$COUNT"
  fi
  ITEM_ICON="$( jq 'listitem[.currentitem].icon' )"
- if [[ "$ITEM_ICON" != "($DIALOG_ICON|)" ]]; then
+ if [[ "$ITEM_ICON" != ("$DIALOG_ICON"|) ]]; then
   track string overlayicon "$DIALOG_ICON" both
   track string icon "$ITEM_ICON" both
  fi
@@ -622,7 +622,7 @@ trackIt() {
  esac
  testIt $THE_RESULT $3 $4 $5
  TESTIT_RESULT=$?
- if [[ "$ITEM_ICON" != "($DIALOG_ICON|)" ]]; then
+ if [[ "$ITEM_ICON" != ("$DIALOG_ICON"|) ]]; then
   track string icon "$DIALOG_ICON" both
   track string overlayicon none both
  fi
