@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="2.06"
+VERSION="2.07"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -84,11 +84,13 @@ chmod ugo+r "$LOG_FILE"
 # dialogSend is intended to handle making sure the appropriate wait time is applied, and just
 #  in case, lets empty the $TRACKER_COMMAND file as well.
 dialogSend() {
- logIt "Sending: $1" 1
- echo "$1" >> "$TRACKER_COMMAND"
- sleep 0.2
- echo > "$TRACKER_COMMAND"
- sleep 0.1
+ if [ -e "$TRACKER_RUNNING" ] || [[ "$1" != "listitem: "* ]]; then
+  logIt "Sending: $1" 1
+  echo "$1" >> "$TRACKER_COMMAND"
+  sleep 0.2
+  echo > "$TRACKER_COMMAND"
+  sleep 0.1
+ fi
 }
 
 selfService() {
@@ -323,9 +325,7 @@ encodeChars() {
 
 track() {
  local THE_STRING="$3"
- if [ -e "$TRACKER_RUNNING" ]; then
-  dialogSend "activate:"
- fi
+ dialogSend "activate:"
  case $1 in
   bool|integer|string)
    local WHICH_DIALOG="${4:-"track"}"
@@ -345,17 +345,13 @@ track() {
     ;;
    esac
    logIt "Updating $THE_DIALOG dialog(s), with $2 of type $1 to: $THE_STRING" 1
-   if [ -e "$TRACKER_RUNNING" ] || [[ "$4" == (both|log) ]]; then
-    dialogSend "$2: $THE_STRING"
-   fi
+   dialogSend "$2: $THE_STRING"
   ;;
   update)
    TRACKER_ITEM=${$( jq 'currentitem' ):-0}
    logIt "Updating $2 of task #$TRACKER_ITEM \"$( jq 'listitem[.currentitem].title' )\" to: $THE_STRING" 1
    plutil -replace "listitem.$TRACKER_ITEM.$2" -string "$THE_STRING" "$TRACKER_JSON"
-   if [ -e "$TRACKER_RUNNING" ]; then
-    dialogSend "listitem: index: $TRACKER_ITEM, $2: $THE_STRING"
-   fi
+   dialogSend "listitem: index: $TRACKER_ITEM, $2: $THE_STRING"
   ;;
   new)
    local TRACK_TITLE="$2"
@@ -445,9 +441,7 @@ track() {
     TRACK_SUCCESSTEAM=""
    fi
    NEW_JSON+='"}'
-   if [ -e "$TRACKER_RUNNING" ]; then
-    dialogSend "$DIALOG_SEND"
-   fi
+   dialogSend "$DIALOG_SEND"
    plutil -insert "listitem" -json "$NEW_JSON" -append "$TRACKER_JSON"
    TRACKER_ITEM=${$( jq 'currentitem' ):--1}
    ((TRACKER_ITEM++))
@@ -627,9 +621,14 @@ trackIt() {
   *)
    for (( sc = $( jq 'listitem[.currentitem].progress' ) ; sc < 80 ; sc = sc + 2 )); do
     track update progress $sc
-    sleep 0.3
+    if [ -e "$TRACKER_RUNNING" ]; then
+     sleep 0.3
+    else
+     sleep 0.9
+    fi
     # dialogSend uses 0.3 seconds and is executed twice, to allow for a second between updates and
-    #  processing, leaves us with a max of 0.3 seconds left to wait.
+    #  processing, leaves us with a max of 0.3 seconds left to wait, but only if the tracker dialog
+    #  is running, if not wait 0.9 seconds.
    done
   ;;
  esac
@@ -637,10 +636,8 @@ trackIt() {
  plutil -remove "listitem.$( jq '.currentitem' ).progress" "$TRACKER_JSON"
  testIt $THE_RESULT $3 $4 $5
  TESTIT_RESULT=$?
- if [[ "$ITEM_ICON" != ("$DIALOG_ICON"|) ]]; then
-  track string icon "$DIALOG_ICON" both
-  track string overlayicon none both
- fi
+ track string icon "$DIALOG_ICON" both
+ track string overlayicon none both
  return $TESTIT_RESULT
 }
 
@@ -1393,32 +1390,33 @@ case $1 in
     TRACK_ICON='SF=checklist'
     TRACK_STATUSTEXT="Loading..."
     TRACK_SUBTITLE="Loading the task list(s) from config profile(s)"
-    TRACK_STATUS="pending"
+    TRACK_STATUS="wait"
     trackNew "Task List"
     track integer trackitem ${$( jq 'currentitem' ):--1}
     runIt "plutil -convert json -o '$INSTALLS_JSON' '$DEFAULTS_FILE'" '' 1
+    dialogSend "listitem: index: $( jq 'trackitem' ), progress: 10"
+    plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loading task list(s)..." "$TRACKER_JSON"
+    dialogSend "listitem: index: $( jq 'trackitem' ), statustext: Loading task list(s)..."
    fi
-   if ! trackStatus; then
-    THE_TITLE="${"$( "$C_JQ" -Mr '.name // empty' "$INSTALLS_JSON" )":-"Main"}"
-    TRACK_ICON="${"$( plutil -extract 'taskIcon' raw -o - "$INSTALLS_JSON" )":-"SF=doc.text"}"
-    TRACK_SUBTITLE="$( "$C_JQ" -Mr '.subtitle // empty' "$INSTALLS_JSON" )"
-    TRACK_ICON="wait"
-    trackNew "$THE_TITLE"
-    if [ "$( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )" = "" ]; then
-     runIt "plutil -insert listitem -array '$INSTALLS_JSON'" '' 1
+   THE_TITLE="${"$( "$C_JQ" -Mr '.name // empty' "$INSTALLS_JSON" )":-"Main"}"
+   if [[ "$( jq 'listitem[.currentitem+1].title' )" == ("$THE_TITLE"|) ]]; then
+    if ! trackStatus; then
+     TRACK_ICON="${"$( plutil -extract 'taskIcon' raw -o - "$INSTALLS_JSON" )":-"SF=doc.text"}"
+     TRACK_SUBTITLE="$( "$C_JQ" -Mr '.subtitle // empty' "$INSTALLS_JSON" )"
+     TRACK_ICON="wait"
+     trackNew "$THE_TITLE"
+     if [ "$( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )" = "" ]; then
+      runIt "plutil -insert listitem -array '$INSTALLS_JSON'" '' 1
+     fi
     fi
    fi
    if [ "$( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )" -gt 0 ]; then
-    if [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
+    if [ "$( jq 'listitem[.currentitem].title' )" = "${"$( "$C_JQ" -Mr '.name // empty' "$INSTALLS_JSON" )":-"Main"}" ] && [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
      track update statustext "Loaded"
      track update status success
     fi
     LIST_FILES="$( eval "ls '$DEFAULTS_BASE-'*" 2>/dev/null )"
     logIt "Additional Config Files to load: $LIST_FILES"
-    if [ "$( jq 'listitem[.trackitem].status' )" != "success" ]; then
-     plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loading task list(s)..." "$TRACKER_JSON"
-     dialogSend "listitem: index: $( jq 'trackitem' ), statustext: Loading task list(s)..."
-    fi
     sleep 0.1
     for LIST_FILE in ${(@f)LIST_FILES} ; do
      logIt "Reading Config File: $LIST_FILE"
@@ -1450,25 +1448,17 @@ case $1 in
      fi
     done
     if [ "$( jq 'listitem[.trackitem].status' )" != "success" ]; then
+     dialogSend "listitem: index: $( jq 'trackitem' ), progress: 35"
      plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Config Profile(s) loaded. Loading Tasks..." "$TRACKER_JSON"
      dialogSend "listitem: index: $( jq 'trackitem' ), statustext: Config Profile(s) loaded. Loading Tasks..."
-    fi
-    
-    track integer startitem $(($( jq 'currentitem' )+1))
-    
-    # load software installs
-    if [ "$( jq 'listitem[.trackitem].status' )" != "success" ]; then
      track integer 'installCount' 0
-     plutil -replace listitem.$( jq 'trackitem' ).status -string "wait" "$TRACKER_JSON"
-     dialogSend "listitem: index: $( jq 'trackitem' ), status: wait"
     fi
 
+    track integer startitem $(($( jq 'currentitem' )+1))
     infoBox
-    
+
     # MARK: Load Installs
     # Cheating by using TRACKER_START to update the Task List loading entry
-    plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Loading tasks..." "$TRACKER_JSON"
-    dialogSend "listitem: index: $( jq 'trackitem' ), statustext: Loading tasks..."
     until [ $( jq 'installCount' ) -ge $( listRead 'installs' ) ]; do
      TASKSLOADING="**Loading Install Task:** $(($( jq 'installCount' )+1))"
      infoBox
@@ -1523,6 +1513,7 @@ case $1 in
     TASKSLOADING=""
 
     if [ "$( jq 'listitem[.trackitem].status' )" != "success" ]; then
+     dialogSend "listitem: index: $( jq 'trackitem' ), progress: 85"
      plutil -replace listitem.$( jq 'trackitem' ).statustext -string "Inserting Pause & Inventory Update..." "$TRACKER_JSON"
      dialogSend "listitem: index: $( jq 'trackitem' ), statustext: Inserting Pause & Inventory Update..."
 
