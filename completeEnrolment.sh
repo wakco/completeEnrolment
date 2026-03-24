@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="2.09"
+VERSION="2.10"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -1135,6 +1135,7 @@ case $1 in
     runIt "sudo -u '$TEMP_ADMIN' mkdir -p '$TEMP_ADMIN_HOME/Library/Preferences'" '' 1
     runIt "sudo -u '$TEMP_ADMIN' defaults write '$TEMP_ADMIN_HOME/Library/Preferences/com.jamfsoftware.selfservice.mac.plist' 'com.jamfsoftware.selfservice.onboardingcomplete' -bool TRUE" '' 1
     runIt "sudo -u '$TEMP_ADMIN' defaults write '$TEMP_ADMIN_HOME/Library/Preferences/com.jamfsoftware.selfserviceplus.plist' 'com.jamfsoftware.selfservice.onboardingcomplete' -bool TRUE" '' 1
+    runIt "sudo -u '$TEMP_ADMIN' defaults write '$TEMP_ADMIN_HOME/Library/Preferences/com.apple.dock.plist' 'autohide' -bool TRUE" '' 1
     runIt "chown '$TEMP_ADMIN' $TEMP_ADMIN_HOME/Library/Preferences/com.jamfsoftware.selfservice*" '' 1
 
     sPlist="$TEMP_ADMIN_HOME/Library/Preferences/com.apple.SetupAssistant.plist"
