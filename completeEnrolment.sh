@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="2.10"
+VERSION="2.11"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -1453,7 +1453,7 @@ case $1 in
        TRACK_SUBTITLE="$( plutil -extract 'subtitle' raw -o - "$LIST_FILE" )"
        TRACK_ICON="${"$( plutil -extract 'taskIcon' raw -o - "$LIST_FILE" )":-"SF=doc.text"}"
        TRACK_STATUS="wait"
-       TRACK_STATUSTEXT="Loading $LIST_FILE..."
+       TRACK_STATUSTEXT="Loading $( basename "$LIST_FILE" )..."
        trackNew "$THE_TITLE"
        for (( i = 0; i < $( plutil -extract 'installs' raw -o - "$LIST_FILE" 2>dev/null ); i++ )); do
         ADD_THIS="$( plutil -extract "installs.$i" json -o - "$LIST_FILE" )"
