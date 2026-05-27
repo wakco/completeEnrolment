@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="2.11"
+VERSION="3.0a1"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -16,6 +16,7 @@ C_DIALOG="/Library/Application Support/Dialog/Dialog.app/Contents/MacOS/dialogcl
 C_MKUSER="/usr/local/bin/mkuser"
 C_ENROLMENT="/usr/local/bin/completeEnrolment"
 C_JQ="/usr/bin/jq"
+C_JCLI="/usr/local/bin/jamf-cli"
 
 checkDialog() {
  if [ ! -e "$C_DIALOG" ]; then
@@ -43,8 +44,8 @@ CLEANUP_FILES+=( "$SETTINGS_PLIST" )
 CACHE="$LIB/Caches/$DEFAULTS_NAME"
 mkdir -p "$CACHE"
 CLEANUP_FILES+=( "$CACHE" )
-JAMF_URL="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist jss_url )"
-JAMF_SERVER="$( echo "$JAMF_URL" | awk -F '(/|:)' '{ print $4 }' )"
+JAMF_CONF_URL="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist jss_url )"
+JAMF_SERVER="$( echo "$JAMF_CONF_URL" | awk -F '(/|:)' '{ print $4 }' )"
 
 # MARK: Whose logged in
 
@@ -349,11 +350,33 @@ track() {
    logIt "Updating $THE_DIALOG dialog(s), with $2 of type $1 to: $THE_STRING" 1
    dialogSend "$2: $THE_STRING"
   ;;
-  update)
+  update|progress|status)
    TRACKER_ITEM=${$( jq 'currentitem' ):-0}
+  ;|
+  update)
    logIt "Updating $2 of task #$TRACKER_ITEM \"$( jq 'listitem[.currentitem].title' )\" to: $THE_STRING" 1
    plutil -replace "listitem.$TRACKER_ITEM.$2" -string "$THE_STRING" "$TRACKER_JSON"
-   dialogSend "listitem: index: $TRACKER_ITEM, $2: $THE_STRING"
+   if [ "$2" = "progress" ]; then
+    plutil -replace "listitem.$TRACKER_ITEM.status" -string "progress" "$TRACKER_JSON"
+    dialogSend "listitem: index: $TRACKER_ITEM, status: progress, progress: $THE_STRING"
+   else
+    dialogSend "listitem: index: $TRACKER_ITEM, $2: $THE_STRING"
+   fi
+  ;;
+  progress|status)
+   logIt "Updating statustext of task #$TRACKER_ITEM \"$( jq 'listitem[.currentitem].title' )\" to: $THE_STRING" 1
+   plutil -replace "listitem.$TRACKER_ITEM.statustext" -string "$THE_STRING" "$TRACKER_JSON"
+  ;|
+  progress)
+   logIt "Updating progress of task #$TRACKER_ITEM \"$( jq 'listitem[.currentitem].title' )\" to: $2" 1
+   plutil -replace "listitem.$TRACKER_ITEM.status" -string "progress" "$TRACKER_JSON"
+   plutil -replace "listitem.$TRACKER_ITEM.progress" -string "$2" "$TRACKER_JSON"
+   dialogSend "listitem: index: $TRACKER_ITEM, status: progress, progress: $2, statustext: $THE_STRING"
+  ;;
+  status)
+   logIt "Updating status of task #$TRACKER_ITEM \"$( jq 'listitem[.currentitem].title' )\" to: $2" 1
+   plutil -replace "listitem.$TRACKER_ITEM.status" -string "$2" "$TRACKER_JSON"
+   dialogSend "listitem: index: $TRACKER_ITEM, status: $2, statustext: $THE_STRING"
   ;;
   new)
    local TRACK_TITLE="$2"
@@ -464,17 +487,16 @@ testIt() {
    fi
   ;&
   date)
-   track update statustext "Last Updated - $( date "+%Y-%m-%d %H:%M:%S %Z" )"
+   track status pending "Last Updated - $( date "+%Y-%m-%d %H:%M:%S %Z" )"
   ;|
   pause)
-   track update statustext "Resumed"
+   track status pending "Resumed"
   ;|
   stamp|date|pause)
-   track update status pending
    return 0
   ;;
   *)
-   track update statustext "Running Test(s)$THE_COUNT..."
+   track status wait "Running Test(s)$THE_COUNT..."
    THE_TEST=false
   ;|
   appstore|teamid)
@@ -510,19 +532,17 @@ testIt() {
   *)
    logIt "Testing with '$THE_TEST'..."
    if eval "$THE_TEST" 2>&1 >> "$LOG_FILE"; then
-    track update status success
     if [ "$RESPONSE" = "" ]; then
-     track update statustext "Completed"
+     track status success "Completed"
     else
-     track update statustext "$RESPONSE"
+     track status success "$RESPONSE"
     fi
     return 0
    else
-    track update status error
     if [ "$ERR_RESPONSE" = "" ]; then
-     track update statustext "Test$THE_COUNT Failed..."
+     track status error "Test$THE_COUNT Failed..."
     else
-     track update statustext "$ERR_RESPONSE"
+     track status error "$ERR_RESPONSE"
     fi
     return 1
    fi
@@ -567,11 +587,10 @@ trackIt() {
      return 0
     fi
    fi
-   track update statustext "$THE_COUNT Running..."
+   track status wait "$THE_COUNT Running..."
    sleep 1
   ;;
  esac
- track update status progress
  track update progress 20
  case $1 in
   command|secure)
@@ -602,24 +621,20 @@ trackIt() {
    unset MANAGED_OPTIONS
   ;;
   jac)
-   track update statustext "Waiting for 'Jamf App Installer' to install..."
-   track update progress 22
+   track progress 22 "Waiting for 'Jamf App Installer' to install..."
   ;|
   mas)
-   track update statustext "Waiting for 'Mac App Store' to install..."
-   track update progress 22
+   track progress 22 "Waiting for 'Mac App Store' to install..."
   ;|
   selfservice)
    if [ "$( jq 'listitem[.currentitem].lastattempt' )" = "" ] || [ $( date "+%s" ) -ge $(($( jq 'listitem[.currentitem].lastattempt' )+$PER_APP*$PER_APP*60)) ]; then
-    track update statustext "Asking Self Service to execute..."
-    track update progress 22
+    track progress 22 "Asking Self Service to execute..."
     runIt "launchctl asuser $( id -u $( whoLogged ) ) open -j -g -a '$( selfService )' -u '$2'"
     track update progress 28
     track update lastattempt "$( date "+%s" )"
     track update progress 30
    else
-    track update statustext "Waiting for 'Self Service' to execute..."
-    track update progress 22
+    track progress 22 "Waiting for 'Self Service' to execute..."
    fi
   ;|
   *)
@@ -653,8 +668,7 @@ repeatIt() {
   ((COUNT++))
  done
  if [ $COUNT -gt $PER_APP ]; then
-  track update status fail
-  track update statustext "Failed after $PER_APP tests"
+  track status fail "Failed after $PER_APP tests"
   unset COUNT
   return 1
  else
@@ -864,6 +878,12 @@ case $1 in
    settingsPlist write apiSecret -string "$8"
   fi
   settingsPlist write email -string "$9"
+  case "$11" in
+   apac|eu|us)
+    settingsPlist write apiTenant -string "$10"
+    settingsPlist write apiGw -string "https://$11.apigw.jamf.com"
+   ;;
+  esac
 
   # MARK: Initialise dialog setup file
   #  our "tracker", although plutil can create an empty json, it can't insert into it, incorrectly
@@ -1038,8 +1058,7 @@ case $1 in
      logIt "User is attempting to log into: $A_ADMIN"
      if dscl . -authonly "$A_ADMIN" "$A_PASS" > /dev/null 2>&1 && [ "$( fdesetup list | grep -c "$A_ADMIN" )" -gt 0 ]; then
       logIt "Login successful, and $A_ADMIN has a Secure Token"
-      track update status success
-      track update statustext "Login Successful"
+      track status success "Login Successful"
       SECURE_ADMIN="$A_ADMIN"
       SECURE_PASS="$A_PASS"
       if [ "$( dscl . -read /Groups/admin GroupMembership | cut -d " " -f 2- | grep -c "$A_ADMIN" )" -lt 1 ]; then
@@ -1052,13 +1071,11 @@ case $1 in
       fi
      elif [ "$( fdesetup list | grep -c "$A_ADMIN" )" -gt 0 ]; then
       logIt "Login to $A_ADMIN failed, asking the user to log in again..."
-      track update status error
-      track update statustest "Password for $A_ADMIN was incorrect"
+      track status error "Password for $A_ADMIN was incorrect"
       TRY_AGAIN="<br>**Password for $A_ADMIN was incorrect.**"
      else
       logIt "Secure Token missing for $A_ADMIN, they are not a Volume Owner, asking the user to log in again..."
-      track update status error
-      track update statustest "$A_ADMIN is not a Volume Owner, please try one of the listed logins"
+      track status error "$A_ADMIN is not a Volume Owner, please try one of the listed logins"
       TRY_AGAIN="<br>**$A_ADMIN is not a Volume Owner.**"
      fi
     done
@@ -1335,20 +1352,22 @@ case $1 in
   # MARK: Add/update JAMF ADMIN
   # finishing setting up admin accounts
   # Add JSS ADMIN
-  # This will load the $JAMF_ADMIN and $JAMF_PASS login details
-  JAMF_AUTH_TOKEN="$( readJSON "$( curl -s --location --request POST "${JAMF_URL}api/oauth/token" \
-   --header 'Content-Type: application/x-www-form-urlencoded' \
-   --data-urlencode "client_id=$( readSaved apiId )" \
-   --data-urlencode 'grant_type=client_credentials' \
-   --data-urlencode "client_secret=$( readSaved apiSecret )" )" "access_token" )"
-  if [ "$JAMF_AUTH_TOKEN" = "" ]; then
-   "$C_DIALOG" --ontop --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to login to Jamf Pro API"
-   errorIt 2 "This should not have happened, are the API ID/Secret details correct?\nResponse from $JAMF_URL:\n$JAMF_AUTH_TOKEN"
-  fi
-  sleep 1
+  # This will load the $JAMF_ADMIN and $JAMF_PASS login details, and the $LAPS_ADMIN account name
+  # Now using jamf-cli, enabling support for Platform API Gateway instead going directly using the less-secure curl method
 
-  JAMF_ACCOUNTS="$( curl -s "${JAMF_URL}api/v2/local-admin-password/$( defaultRead managementID true )/accounts" \
-   -H "accept: application/json" -H "Authorization: Bearer $JAMF_AUTH_TOKEN" )"
+  if [ ! -e "$C_JCLI" ]; then
+   "$C_INSTALL" valuesfromarguments name="jamf-cli" type=pkg downloadURL='$( downloadURLFromGit "Jamf-Concepts" "jamf-cli" )' appNewVersion='$( versionFromGit "Jamf-Concepts" "jamf-cli" )' expectedTeamID="483DWKW443" appName="jamf-cli" "appCustomVersion() { $C_JCLI --version | head -n1 | awk '{ print \$2 }' }"
+  fi
+  export JAMF_CLIENT_ID="$( readSaved apiId )"
+  export JAMF_CLIENT_SECRET="$( readSaved apiSecret )"
+  if [ "$( readSaved apiTenant )" = "" ] || [ "$( readSaved apiGw )" = "" ]; then
+   export JAMF_URL="$JAMF_CONF_URL"
+  else
+   export JAMF_URL="$( settingsPlist read apiGw )"
+   export JAMF_TENANT_ID="$( readSaved apiTenant )"
+  fi
+
+  JAMF_ACCOUNTS="$( "$C_JCLI" pro local-admin-passwords accounts "$( defaultRead managementID true )" )"
   logIt "Checking for JMF account in:\n$JAMF_ACCOUNTS\n" 1
   for (( i = 0; i < $( readJSON "$JAMF_ACCOUNTS" "totalCount" ); i++ )); do
    if [ "$( readJSON "$JAMF_ACCOUNTS" "results[$i].userSource" )" = "JMF" ]; then
@@ -1366,8 +1385,7 @@ case $1 in
   fi
   sleep 1
 
-  JAMF_PASS="$( readJSON "$( curl -s "${JAMF_URL}api/v2/local-admin-password/$( defaultRead managementID true )/account/$JAMF_ADMIN/$JAMF_GUID/password" \
-   -H "accept: application/json" -H "Authorization: Bearer $JAMF_AUTH_TOKEN" )" "password" )"
+  JAMF_PASS="$( "$C_JCLI" pro local-admin-passwords password-by-guid "$( defaultRead managementID true )" "$JAMF_ADMIN" "$JAMF_GUID" --field "password" )"
   if [ -z "$JAMF_PASS" ]; then
    "$C_DIALOG" --ontop --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account password from Jamf Pro API"
    errorIt 2 "this should not have happened, unable to get Jamf Managed Account Password:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
@@ -1436,8 +1454,7 @@ case $1 in
    fi
    if [ "$( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )" -gt 0 ]; then
     if [ "$( jq 'listitem[.currentitem].title' )" = "${"$( "$C_JQ" -Mr '.name // empty' "$INSTALLS_JSON" )":-"Main"}" ] && [ "$( jq 'listitem[.currentitem].status' )" != "success" ]; then
-     track update statustext "Loaded"
-     track update status success
+     track status success "Loaded"
     fi
     LIST_FILES="$( eval "ls '$DEFAULTS_BASE-'*" 2>/dev/null )"
     logIt "Additional Config Files to load: $LIST_FILES"
@@ -1462,11 +1479,9 @@ case $1 in
         logIt "Installs: $( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null )" 1
        done
        if [ $( plutil -extract 'installs' raw -o - "$INSTALLS_JSON" 2>/dev/null ) -gt $CURRENT_INSTALLS ]; then
-        track update statustext "Loaded"
-        track update status success
+        track status success "Loaded"
        else
-        track update statustext "Loading $LIST_FILE failed"
-        track update status error
+        track status error "Loading $LIST_FILE failed"
        fi
       fi
      fi
@@ -1654,8 +1669,7 @@ case $1 in
     esac
     track integer currentitem $(($( jq 'currentitem' )+1))
    done
-   track update status success
-   track update statustext "Checked"
+   track status success "Checked"
    FINISHED="$( date "+%s" )"
    ((FULLSUCCESS_COUNT++))
    logIt "Success: $FULLSUCCESS_COUNT, Installs: $SUCCESS_COUNT, Failed: $FAILED_COUNT"
@@ -1696,7 +1710,7 @@ case $1 in
    EMAIL_BODY+="<b>Installed:</b> $SUCCESS_COUNT\n"
    EMAIL_BODY+="<b>Failed:</b> $FAILED_COUNT\n"
    EMAIL_BODY+="<b>Completed Tasks:</b> $FULLSUCCESS_COUNT\n"
-   LOG_URL="${JAMF_URL}computers.html?id=$( defaultRead jssID true )&o=r&v=history"
+   LOG_URL="${JAMF_CONF_URL}computers.html?id=$( defaultRead jssID true )&o=r&v=history"
    EMAIL_BODY+="\nThe initial log is available at: <a href=\"$LOG_URL\">$LOG_URL</a>,\n"
    EMAIL_BODY+="with full logs available in the /Library/Logs folder on the computer.\n"
    EMAIL_BODY+="Please review the logs and contact ${"$( defaultRead serviceName true )":-"Service Management"} if any assistance is required.\n\n\n"
@@ -1714,7 +1728,7 @@ case $1 in
    EMAIL_BODY+="</table>"
 
    # MARK: Final preparation of email
-   trackupdate statustext "Identifying where to email..."
+   track status pending "Identifying where to email..."
    EMAIL_FROM="${"$( defaultRead emailFrom true )":-""}"
    EMAIL_TO="${"$( defaultRead emailTo true )":-""}"
    EMAIL_ERR="${"$( defaultRead emailErrors true )":-""}"
@@ -1750,7 +1764,7 @@ case $1 in
      fi
      if [[ "$AUTH_SMTP" = *"--mail-rcpt"* ]]; then
       logIt "Sending email" 1
-      track update statustext "Sending email"
+      track status wait "Sending email"
       mailSend "$EMAIL_FROM" "$EMAIL_HIDDEN" "$EMAIL_SUBJECT" "$EMAIL_BODY_ENCODED"
       MAIL_RESULT=$?
      fi
@@ -1759,19 +1773,19 @@ case $1 in
     if [ "$EMAIL_FROM" != "" ] && [ "$EMAIL_SUBJECT" != "" ]; then
      logIt "From, and Subject is configured, attempting to send emails" 1
      if [ "$EMAIL_TO" != "" ]; then
-      track update statustext "To address configured, sending email"
+      track status wait "To address configured, sending email"
       mailSend "$EMAIL_FROM" "$EMAIL_TO" "$EMAIL_SUBJECT" "$EMAIL_BODY_ENCODED" "$EMAIL_HIDDEN"
       TO_RESULT=$?
       sleep 5
      fi
      if [ "$EMAIL_ERR" != "" ] && [ "$FAILURE_COUNT" -gt 0 ]; then
-      track update statustext "Error address configured, sending email"
+      track status wait "Error address configured, sending email"
       mailSend "$EMAIL_FROM" "$EMAIL_ERR" "$EMAIL_SUBJECT" "$EMAIL_BODY_ENCODED" "$EMAIL_HIDDEN"
       ERR_RESULT=$?
       sleep 5
      fi
      if [ "$EMAIL_BCC" != "" ]; then
-      track update statustext "BCC address configured, sending email"
+      track status wait "BCC address configured, sending email"
       mailSend "$EMAIL_FROM" "$EMAIL_BCC" "$EMAIL_SUBJECT" "$EMAIL_BODY_ENCODED" "$EMAIL_HIDDEN"
       BCC_RESULT=$?
      fi
@@ -1780,11 +1794,9 @@ case $1 in
 
    # MARK: Send email
    if [ "$MAIL_RESULT" -gt 0 ] || [ "$TO_RESULT" -gt 0 ] || [ "$ERR_RESULT" -gt 0 ] || [ "$BCC_RESULT" -gt 0 ]; then
-    track update statustext "An email failed to send, see log"
-    track update status fail
+    track status fail "An email failed to send, see log"
    else
-    track update statustext "Email(s) sent"
-    track update status success
+    track status success "Email(s) sent"
     ((FULLSUCCESS_COUNT++))
    fi
   fi
@@ -1864,7 +1876,6 @@ case $1 in
    *)
     logIt "Removing the blurscreen"
     track bool blurscreen false both
-#    plutil -replace blurscreen -bool false "$LOG_JSON"
     dialogSend "blurscreen: disable"
    ;|
    2)
