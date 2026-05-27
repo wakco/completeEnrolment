@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="3.0a1"
+VERSION="3.0a2"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -915,7 +915,7 @@ case $1 in
   track integer loghistory 2000 log
 
   # Remaining Tasks
-  REMAINING_TASKS=25
+  REMAINING_TASKS=26
 
   # MARK: set time
   TIME_ZONE="${"$( defaultRead systemTimeZone true )":-"$( systemsetup -gettimezone | awk "{print \$NF}" )"}"
@@ -1355,9 +1355,12 @@ case $1 in
   # This will load the $JAMF_ADMIN and $JAMF_PASS login details, and the $LAPS_ADMIN account name
   # Now using jamf-cli, enabling support for Platform API Gateway instead going directly using the less-secure curl method
 
-  if [ ! -e "$C_JCLI" ]; then
-   "$C_INSTALL" valuesfromarguments name="jamf-cli" type=pkg downloadURL='$( downloadURLFromGit "Jamf-Concepts" "jamf-cli" )' appNewVersion='$( versionFromGit "Jamf-Concepts" "jamf-cli" )' expectedTeamID="483DWKW443" appName="jamf-cli" "appCustomVersion() { $C_JCLI --version | head -n1 | awk '{ print \$2 }' }"
-  fi
+    # MARK: Install mkuser
+    trackNow "Installing jamf-cli" \
+     install "valuesfromarguments name=\"jamf-cli\" type=pkg downloadURL='\$( downloadURLFromGit \"Jamf-Concepts\" \"jamf-cli\" )' appNewVersion='\$( versionFromGit \"Jamf-Concept\" \"jamf-cli\" )' expectedTeamID=\"483DWKW443\" appName=\"jamf-cli\" \"appCustomVersion() { $C_JCLI --version | head -n1 | awk '{ print \$2 }' }\"" \
+     file "$C_JCLI" 'SF=apple.terminal'
+    ((REMAINING_TASKS--))
+
   export JAMF_CLIENT_ID="$( readSaved apiId )"
   export JAMF_CLIENT_SECRET="$( readSaved apiSecret )"
   if [ "$( readSaved apiTenant )" = "" ] || [ "$( readSaved apiGw )" = "" ]; then
