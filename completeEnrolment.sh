@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="3.0b1"
+VERSION="3.0b2"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -1355,9 +1355,17 @@ case $1 in
   # Now using jamf-cli, enabling support for Platform API Gateway instead going directly using the less-secure curl method
 
   # MARK: Install jamf-cli
+  MANAGED_OPTIONS="NOTIFY=silent"
+  if [ "$GITHUBAPI" != "" ]; then
+   MANAGED_OPTIONS+=" $GITHUBAPI"
+  fi
+  if $( defaultReadBool forceInstall true ); then
+   MANAGED_OPTIONS+=" INSTALL=force"
+  fi
   trackNow "Installing jamf-cli" \
-   install "valuesfromarguments name=\"jamf-cli\" type=pkg downloadURL='\$( downloadURLFromGit \"Jamf-Concepts\" \"jamf-cli\" )' appNewVersion='\$( versionFromGit \"Jamf-Concept\" \"jamf-cli\" )' expectedTeamID=\"483DWKW443\" appName=\"jamf-cli\" \"appCustomVersion() { $C_JCLI --version | head -n1 | awk '{ print \$2 }' }\"" \
+   secure "'$C_INSTALL' valuesfromarguments name=\"jamf-cli\" type=pkg downloadURL='\$( downloadURLFromGit \"Jamf-Concepts\" \"jamf-cli\" )' appNewVersion='\$( versionFromGit \"Jamf-Concept\" \"jamf-cli\" )' expectedTeamID=\"483DWKW443\" appName=\"jamf-cli\" \"appCustomVersion() { $C_JCLI --version | head -n1 | awk '{ print \$2 }' }\" $MANAGED_OPTIONS" "Installomator Label - jamf-cli" \
    file "$C_JCLI" 'SF=apple.terminal'
+  unset MANAGED_OPTIONS
   ((REMAINING_TASKS--))
 
   export JAMF_CLIENT_ID="$( readSaved apiId )"
