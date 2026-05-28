@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="3.0a3"
+VERSION="3.0a4"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -1370,7 +1370,7 @@ case $1 in
   fi
 
   logIt "Loading Jamf accounts..." 1
-  JAMF_ACCOUNTS="$( runIt "'$C_JCLI' pro local-admin-passwords accounts '$( defaultRead managementID true )'" '' 1  )"
+  JAMF_ACCOUNTS="$( runIt "'$C_JCLI' pro local-admin-passwords accounts '$( defaultRead managementID true )' --no-color --no-input --quiet" '' 1  )"
   logIt "Checking for JMF account in:\n$JAMF_ACCOUNTS\n" 1
   for (( i = 0; i < $( readJSON "$JAMF_ACCOUNTS" "totalCount" ); i++ )); do
    if [ "$( readJSON "$JAMF_ACCOUNTS" "results[$i].userSource" )" = "JMF" ]; then
@@ -1388,7 +1388,7 @@ case $1 in
   fi
   sleep 1
 
-  JAMF_PASS="$( runIt "'$C_JCLI' pro local-admin-passwords password-by-guid '$( defaultRead managementID true )' '$JAMF_ADMIN' '$JAMF_GUID' --field 'password'" '' 1 )"
+  JAMF_PASS="$( runIt "'$C_JCLI' pro local-admin-passwords password-by-guid '$( defaultRead managementID true )' '$JAMF_ADMIN' '$JAMF_GUID' --field 'password' --no-color --no-input --quiet" '' 1 )"
   if [ -z "$JAMF_PASS" ]; then
    "$C_DIALOG" --ontop --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account password from Jamf Pro API"
    errorIt 2 "this should not have happened, unable to get Jamf Managed Account Password:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
