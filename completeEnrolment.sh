@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="3.0a2"
+VERSION="3.0a3"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -183,10 +183,9 @@ runIt() {
  THE_RESULT=$?
  DEBUG_LEVEL=${3:-0}
  if [ $DEBUG -ge $DEBUG_LEVEL ]; then
-  echo "$(date) $(debugLevel) --- Executed '${2:-"$1"}' which returned signal $THE_RESULT and:\n$THE_RETURN" | tee -a "$LOG_FILE"
- else
-  echo "$THE_RETURN"
+  echo "$(date) $(debugLevel) --- Executed '${2:-"$1"}' which returned signal $THE_RESULT and:\n$THE_RETURN" >> "$LOG_FILE"
  fi
+ echo "$THE_RETURN"
  return $THE_RESULT
 }
 
@@ -652,7 +651,7 @@ trackIt() {
   ;;
  esac
  track update progress 80
- plutil -remove "listitem.$( jq '.currentitem' ).progress" "$TRACKER_JSON"
+ plutil -remove "listitem.$( jq 'currentitem' ).progress" "$TRACKER_JSON"
  testIt $THE_RESULT $3 $4 $5
  TESTIT_RESULT=$?
 # track string icon "$DIALOG_ICON" both
@@ -1355,11 +1354,11 @@ case $1 in
   # This will load the $JAMF_ADMIN and $JAMF_PASS login details, and the $LAPS_ADMIN account name
   # Now using jamf-cli, enabling support for Platform API Gateway instead going directly using the less-secure curl method
 
-    # MARK: Install mkuser
-    trackNow "Installing jamf-cli" \
-     install "valuesfromarguments name=\"jamf-cli\" type=pkg downloadURL='\$( downloadURLFromGit \"Jamf-Concepts\" \"jamf-cli\" )' appNewVersion='\$( versionFromGit \"Jamf-Concept\" \"jamf-cli\" )' expectedTeamID=\"483DWKW443\" appName=\"jamf-cli\" \"appCustomVersion() { $C_JCLI --version | head -n1 | awk '{ print \$2 }' }\"" \
-     file "$C_JCLI" 'SF=apple.terminal'
-    ((REMAINING_TASKS--))
+  # MARK: Install jamf-cli
+  trackNow "Installing jamf-cli" \
+   install "valuesfromarguments name=\"jamf-cli\" type=pkg downloadURL='\$( downloadURLFromGit \"Jamf-Concepts\" \"jamf-cli\" )' appNewVersion='\$( versionFromGit \"Jamf-Concept\" \"jamf-cli\" )' expectedTeamID=\"483DWKW443\" appName=\"jamf-cli\" \"appCustomVersion() { $C_JCLI --version | head -n1 | awk '{ print \$2 }' }\"" \
+   file "$C_JCLI" 'SF=apple.terminal'
+  ((REMAINING_TASKS--))
 
   export JAMF_CLIENT_ID="$( readSaved apiId )"
   export JAMF_CLIENT_SECRET="$( readSaved apiSecret )"
@@ -1370,7 +1369,8 @@ case $1 in
    export JAMF_TENANT_ID="$( readSaved apiTenant )"
   fi
 
-  JAMF_ACCOUNTS="$( "$C_JCLI" pro local-admin-passwords accounts "$( defaultRead managementID true )" )"
+  logIt "Loading Jamf accounts..." 1
+  JAMF_ACCOUNTS="$( runIt "'$C_JCLI' pro local-admin-passwords accounts '$( defaultRead managementID true )'" '' 1  )"
   logIt "Checking for JMF account in:\n$JAMF_ACCOUNTS\n" 1
   for (( i = 0; i < $( readJSON "$JAMF_ACCOUNTS" "totalCount" ); i++ )); do
    if [ "$( readJSON "$JAMF_ACCOUNTS" "results[$i].userSource" )" = "JMF" ]; then
@@ -1388,7 +1388,7 @@ case $1 in
   fi
   sleep 1
 
-  JAMF_PASS="$( "$C_JCLI" pro local-admin-passwords password-by-guid "$( defaultRead managementID true )" "$JAMF_ADMIN" "$JAMF_GUID" --field "password" )"
+  JAMF_PASS="$( runIt "'$C_JCLI' pro local-admin-passwords password-by-guid '$( defaultRead managementID true )' '$JAMF_ADMIN' '$JAMF_GUID' --field 'password'" '' 1 )"
   if [ -z "$JAMF_PASS" ]; then
    "$C_DIALOG" --ontop --icon warning --overlayicon "$DIALOG_ICON" --title none --message "Error: unable to get management account password from Jamf Pro API"
    errorIt 2 "this should not have happened, unable to get Jamf Managed Account Password:\n$JAMF_AUTH_TOKEN\n$JAMF_ACCOUNTS"
