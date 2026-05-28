@@ -1370,7 +1370,7 @@ case $1 in
   fi
 
   logIt "Loading Jamf accounts..." 1
-  JAMF_ACCOUNTS="$( runIt "'$C_JCLI' pro local-admin-passwords accounts '$( defaultRead managementID true )' --no-color --no-input --quiet" '' 1  )"
+  JAMF_ACCOUNTS="$( runIt "'$C_JCLI' pro local-admin-passwords accounts '$( defaultRead managementID true )' --no-color --no-input --quiet" '' 1 )"
   logIt "Checking for JMF account in:\n$JAMF_ACCOUNTS\n" 1
   for (( i = 0; i < $( readJSON "$JAMF_ACCOUNTS" "totalCount" ); i++ )); do
    if [ "$( readJSON "$JAMF_ACCOUNTS" "results[$i].userSource" )" = "JMF" ]; then
