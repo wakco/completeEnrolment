@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="3.0b2"
+VERSION="3.0b3"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -327,7 +327,9 @@ encodeChars() {
 
 track() {
  local THE_STRING="$3"
- dialogSend "activate:"
+ if [ $DEBUG -eq 0 ]; then
+  dialogSend "activate:"
+ fi
  case $1 in
   bool|integer|string)
    local WHICH_DIALOG="${4:-"track"}"
@@ -902,8 +904,10 @@ case $1 in
    track string appearance light
   fi
   if [ $DEBUG -gt 0 ]; then
+   track bool moveable true
    track bool blurscreen false
   else
+   track bool moveable false
    track bool blurscreen true
   fi
   ditto "$TRACKER_JSON" "$LOG_JSON"
@@ -1868,13 +1872,15 @@ case $1 in
   COMMAND_FILE="/tmp/finished-$$"
   touch "$COMMAND_FILE"
   chmod ugo+r "$COMMAND_FILE"
-  activateLoop() {
-   while [ -e "$COMMAND_FILE" ]; do
-    echo "activate:" >> "$COMMAND_FILE"
-    sleep 60
-   done
-  }
-  activateLoop &
+  if [ $DEBUG -eq 0 ]; then
+   activateLoop() {
+    while [ -e "$COMMAND_FILE" ]; do
+     echo "activate:" >> "$COMMAND_FILE"
+     sleep 60
+    done
+   }
+   activateLoop &
+  fi
   "$C_DIALOG" --title "Installation Complete" --message "$SUCCESS_COUNT of $( jq 'installCount' ) installed.  \n\nRestart, Migrate, or check the logs?" \
    --helpmessage "**Buttons**:  <br>- **View Details** for logs or task list,  \n- Open **Migration Assistant**, or  \n- To log in, **Restart Now**" \
    --infobuttontext "View Details" --button2text "Migration Assistant" --button1text "Restart Now" \
