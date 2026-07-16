@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="3.0b4"
+VERSION="3.0b5"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -43,13 +43,14 @@ CLEANUP_FILES=( "$C_ENROLMENT" )
 STARTUP_PLIST="$LIB/LaunchDaemons/$DEFAULTS_PLIST"
 CLEANUP_FILES+=( "$STARTUP_PLIST" )
 LOGIN_PLIST="$LIB/LaunchAgents/$DEFAULTS_PLIST"
+LOGIN_WINDOW_PLIST="$LIB/Preferences/com.apple.loginwindow.plist"
 CLEANUP_FILES+=( "$LOGIN_PLIST" )
 SETTINGS_PLIST="$PREFS/$DEFAULTS_PLIST"
 CLEANUP_FILES+=( "$SETTINGS_PLIST" )
 CACHE="$LIB/Caches/$DEFAULTS_NAME"
 mkdir -p "$CACHE"
 CLEANUP_FILES+=( "$CACHE" )
-JAMF_CONF_URL="$( defaults read /Library/Preferences/com.jamfsoftware.jamf.plist jss_url )"
+JAMF_CONF_URL="$( plutil -extract jss_url raw -o - /Library/Preferences/com.jamfsoftware.jamf.plist )"
 JAMF_SERVER="$( echo "$JAMF_CONF_URL" | awk -F '(/|:)' '{ print $4 }' )"
 
 # MARK: Whose logged in
@@ -105,7 +106,7 @@ selfService() {
  #  since the app might be renamed, we re-check what is configured first, failing that try mdfind,
  #  limited to /Applications, and if that still fails, fall back to: /Applications/*Self Service*
  SSMETHODS=(
-  "defaults read /Library/Preferences/com.jamfsoftware.jamf.plist self_service_plus_path 2>/dev/null"
+  "plutil -extract self_service_plus_path raw -o - /Library/Preferences/com.jamfsoftware.jamf.plist 2>/dev/null"
   "mdfind kMDItemCFBundleIdentifier = 'com.jamf.selfserviceplus' | grep -E '^/Applications'"
   "ls -d /Applications/* | grep -m1 'Self Service'"
  )
@@ -149,7 +150,7 @@ defaultRead() {
  local defaultResult=""
  local checkOnce=${2:-false}
  for (( i = 1; i < 11 ; i++ )); do
-  defaultResult="$( defaults read "$DEFAULTS_FILE" "$1" 2>/dev/null )"
+  defaultResult="$( plutil -extract "$1" raw -o - "$DEFAULTS_FILE" 2>/dev/null )"
   echo "$(date) - (Attempt #$i) Reading Preference $1: $defaultResult" >> "$LOG_FILE"
   if [ "$defaultResult" != "" ] || [[ -e "$DEFAULTS_FILE" && $checkOnce ]]; then
    break
@@ -173,7 +174,17 @@ listRead() {
 }
 
 settingsPlist() {
- eval "defaults $1 '$SETTINGS_PLIST' '$2' '$3' '$4'" 2>/dev/null
+ case $1 in
+  read)
+   eval "plutil -extract '$2' raw -o - '$SETTINGS_PLIST'" 2>/dev/null
+  ;;
+  write)
+   if [ ! -e "$SETTINGS_PLIST" ]; then
+    eval "plutil -create xml1 '$SETTINGS_PLIST'" 2>/dev/null
+   fi
+   eval "plutil -replace '$2' '$3' '$4' $SETTINGS_PLIST'" 2>/dev/null
+  ;;
+ esac
 }
 
 readSaved() {
@@ -994,11 +1005,16 @@ case $1 in
     # Preparing the Login window
     # These settings fix a quirk with automated where the login window instead of having a
     # background, ends up displaying a grey background these two settings apparently repait that.
-    runIt "defaults write $LIB/Preferences/com.apple.loginwindow.plist AdminHostInfo -string HostName" '' 1
-    runIt "defaults write $LIB/Preferences/com.apple.loginwindow.plist SHOWFULLNAME -bool true" '' 1
+    if [ ! -e "$LOGIN_WINDOW_PLIST" ]; then
+     runIt "plutil -create binary1 $LOGIN_WINDOW_PLIST" '' 1
+    fi
+    runIt "plutil -replace AdminHostInfo -string HostName $LOGIN_WINDOW_PLIST" '' 1
+    runIt "plutil -replace SHOWFULLNAME -bool YES $LOGIN_WINDOW_PLIST" '' 1
 
     # MARK: Restart the login window
-    runIt "/usr/bin/defaults write /Library/Preferences/com.apple.loginwindow.plist LoginwindowText 'Enrolled at $( /usr/bin/profiles status -type enrollment | /usr/bin/grep server | /usr/bin/awk -F '[:/]' '{ print $5 }' )\nplease wait while initial configuration is performed...\nThis computer will restart shortly.'" '' 1
+    runIt "plutil -replace LoginwindowText -string 'Enrolled at $( profiles status -type enrollment | grep server | awk -F '[:/]' '{ print $5 }' )
+please wait while initial configuration is performed...
+This computer will restart shortly.' $LOGIN_WINDOW_PLIST" '' 1
     sleep 2
 
     # only kill the login window if it is already running
@@ -1008,10 +1024,19 @@ case $1 in
 
     # MARK: Start dialog on loginwindow
     sleep 2
-    runIt "defaults write '$LOGIN_PLIST' LimitLoadToSessionType -array 'LoginWindow'" '' 1
-    runIt "defaults write '$LOGIN_PLIST' Label '$DEFAULTS_NAME.loginwindow'" '' 1
-    runIt "defaults write '$LOGIN_PLIST' RunAtLoad -bool TRUE" '' 1
-    runIt "defaults write '$LOGIN_PLIST' ProgramArguments -array '$C_DIALOG' '--ontop' '--loginwindow' '--button1disabled' '--button1text' 'none' '--jsonfile' '$TRACKER_JSON'" '' 1
+    runIt "plutil -create xml1 '$LOGIN_PLIST'" '' 1
+    runIt "plutil -replace LimitLoadToSessionType -array 'LoginWindow' '$LOGIN_PLIST'" '' 1
+    runIt "plutil -replace Label -string '$DEFAULTS_NAME.loginwindow' '$LOGIN_PLIST'" '' 1
+    runIt "plutil -replace RunAtLoad -bool YES '$LOGIN_PLIST'" '' 1
+    runIt "plutil -insert ProgramArguments -array '$LOGIN_PLIST'" '' 1
+    runIt "plutil -replace ProgramArguments -string '$C_DIALOG' -append '$LOGIN_PLIST'" '' 1
+    runIt "plutil -replace ProgramArguments -string '--ontop' -append '$LOGIN_PLIST'" '' 1
+    runIt "plutil -replace ProgramArguments -string '--loginwindow' -append '$LOGIN_PLIST'" '' 1
+    runIt "plutil -replace ProgramArguments -string '--button1disabled' -append '$LOGIN_PLIST'" '' 1
+    runIt "plutil -replace ProgramArguments -string '--button1text' -append '$LOGIN_PLIST'" '' 1
+    runIt "plutil -replace ProgramArguments -string 'none' -append '$LOGIN_PLIST'" '' 1
+    runIt "plutil -replace ProgramArguments -string '--jsonfile' -append '$LOGIN_PLIST'" '' 1
+    runIt "plutil -replace ProgramArguments -string '$TRACKER_JSON' -append '$LOGIN_PLIST'" '' 1
     runIt "chmod ugo+r '$LOGIN_PLIST'" '' 1
     sleep 2
     touch "$TRACKER_RUNNING"
@@ -1121,7 +1146,7 @@ case $1 in
 
     # MARK: Setup Startup after restart
     trackNow "Add this script to startup process" \
-     secure "defaults write '$STARTUP_PLIST' Label '$DEFAULTS_NAME' ; defaults write '$STARTUP_PLIST' RunAtLoad -bool TRUE ; defaults write '$STARTUP_PLIST' ProgramArguments -array '$C_ENROLMENT' ; chmod go+r '$STARTUP_PLIST'" "Creating '$STARTUP_PLIST'" \
+     secure "if [ ! -e '$STARTUP_PLIST' ]; then plutil -create xml1 '$STARTUP_PLIST' ; fi ; plutil -replace Label -string '$DEFAULTS_NAME' '$STARTUP_PLIST' ; plutil -replace RunAtLoad -bool YES '$STARTUP_PLIST' ; plutil -insert ProgramArguments -array '$STARTUP_PLIST' ; plutil -insert ProgramArguments -string '$C_ENROLMENT' -append '$STARTUP_PLIST' ; chmod go+r '$STARTUP_PLIST'" "Creating '$STARTUP_PLIST'" \
      file "$STARTUP_PLIST" 'SF=autostartstop'
     ((REMAINING_TASKS--))
 
@@ -1155,18 +1180,26 @@ case $1 in
     #  help with installing, and as such can't have Self Service macOS Onboarding getting in the way
     TEMP_ADMIN_HOME="$( dscl . read "/Users/$TEMP_ADMIN" NFSHomeDirectory | awk -F ': ' '{ print $NF }' )"
     runIt "sudo -u '$TEMP_ADMIN' mkdir -p '$TEMP_ADMIN_HOME/Library/Preferences'" '' 1
-    runIt "sudo -u '$TEMP_ADMIN' defaults write '$TEMP_ADMIN_HOME/Library/Preferences/com.jamfsoftware.selfservice.mac.plist' 'com.jamfsoftware.selfservice.onboardingcomplete' -bool TRUE" '' 1
-    runIt "sudo -u '$TEMP_ADMIN' defaults write '$TEMP_ADMIN_HOME/Library/Preferences/com.jamfsoftware.selfserviceplus.plist' 'com.jamfsoftware.selfservice.onboardingcomplete' -bool TRUE" '' 1
-    runIt "sudo -u '$TEMP_ADMIN' defaults write '$TEMP_ADMIN_HOME/Library/Preferences/com.apple.dock.plist' 'autohide' -bool TRUE" '' 1
-    runIt "chown '$TEMP_ADMIN' $TEMP_ADMIN_HOME/Library/Preferences/com.jamfsoftware.selfservice*" '' 1
+    if [ ! -e "$TEMP_ADMIN_HOME/Library/Preferences/com.jamfsoftware.selfserviceplus.plist" ]; then
+     runIt "sudo -u '$TEMP_ADMIN' plutil -create xml1 '$TEMP_ADMIN_HOME/Library/Preferences/com.jamfsoftware.selfserviceplus.plist'" '' 1
+    fi
+    runIt "sudo -u '$TEMP_ADMIN' plutil -replace 'com.jamfsoftware.selfservice.onboardingcomplete' -bool YES '$TEMP_ADMIN_HOME/Library/Preferences/com.jamfsoftware.selfserviceplus.plist'" '' 1
+    if [ ! -e "$TEMP_ADMIN_HOME/Library/Preferences/com.apple.dock.plist" ]; then
+     runIt "sudo -u '$TEMP_ADMIN' plutil -create binary1 '$TEMP_ADMIN_HOME/Library/Preferences/com.apple.dock.plist'" '' 1
+    fi
+    runIt "sudo -u '$TEMP_ADMIN' plutil -replace 'autohide' -bool YES '$TEMP_ADMIN_HOME/Library/Preferences/com.apple.dock.plist'" '' 1
+    runIt "chown '$TEMP_ADMIN' $TEMP_ADMIN_HOME/Library/Preferences/com.jamfsoftware.selfservice* $TEMP_ADMIN_HOME/Library/Preferences/com.apple.dock.plist" '' 1
 
     sPlist="$TEMP_ADMIN_HOME/Library/Preferences/com.apple.SetupAssistant.plist"
     sOS="$(sw_vers --productVersion)"
     sBuild="$(sw_vers --buildVersion)"
+    if [ ! -e "$sPlist" ]; then
+     runIt "sudo -u '$TEMP_ADMIN' plutil -create xml1 '$sPlist'" '' 1
+    fi
 
     setupTempAdmin() {
      for sItem in $sList; do
-      runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' '$sItem' $1" '' 1
+      runIt "sudo -u '$TEMP_ADMIN' plutil -replace '$sItem' $1 '$sPlist'" '' 1
      done
     }
 
@@ -1191,7 +1224,7 @@ case $1 in
      "DidSeeTrueTone"
      "DidSeeiCloudLoginForStorageServices"
     )
-    setupTempAdmin "-bool TRUE"
+    setupTempAdmin "-bool YES"
 
     sList=(
      "InitialAccountOnMac"
@@ -1200,7 +1233,7 @@ case $1 in
      "NSAddServicesToContextMenus"
      "SkipFirstLoginOptimization"
     )
-    setupTempAdmin "-bool FALSE"
+    setupTempAdmin "-bool NO"
 
     sList=(
      "DidSeeNewFeaturesProductVersion"
@@ -1221,11 +1254,11 @@ case $1 in
     )
     setupTempAdmin "-string '$sBuild'"
 
-    runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' 'LastPrivacyBundleVersion' -string 2" '' 1
-    runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' 'PreviousBuildVersion' -string 0" '' 1
-    runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' 'PreviousSystemVersion' -string 0" '' 1
-    runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' 'MiniBuddyLaunchReason' -integer 0" '' 1
-    runIt "sudo -u '$TEMP_ADMIN' defaults write '$sPlist' 'InitialAccountSetupDate' -date '$( date -j -v-1d "+%Y-%m-%dT%H:%M:%SZ" )'" '' 1
+    runIt "sudo -u '$TEMP_ADMIN' plutil -replace 'LastPrivacyBundleVersion' -string 2 '$sPlist'" '' 1
+    runIt "sudo -u '$TEMP_ADMIN' plutil -replace 'PreviousBuildVersion' -string 0 '$sPlist'" '' 1
+    runIt "sudo -u '$TEMP_ADMIN' plutil -replace 'PreviousSystemVersion' -string 0 '$sPlist'" '' 1
+    runIt "sudo -u '$TEMP_ADMIN' plutil -replace 'MiniBuddyLaunchReason' -integer 0 '$sPlist'" '' 1
+    runIt "sudo -u '$TEMP_ADMIN' plutil -replace 'InitialAccountSetupDate' -date '$( date -j -v-1d "+%Y-%m-%dT%H:%M:%SZ" )' '$sPlist'" '' 1
     unset sList sPlist sOS sBuilt
 
    ;|
@@ -1300,12 +1333,10 @@ case $1 in
  process)
   REMAINING_TASKS=11
   # clear the LoginwindowText
-  runIt "/usr/bin/defaults delete /Library/Preferences/com.apple.loginwindow.plist LoginwindowText" '' 1
+  runIt "plutil -remove LoginwindowText /Library/Preferences/com.apple.loginwindow.plist" '' 1
   # update LOG_JSON to identify and follow the correct log file.
   track string displaylog "$LOG_FILE" log
-#  plutil -replace displaylog -string "$LOG_FILE" "$LOG_JSON"
   track string message "Please wait while this computer is set up...<br>Log File available at: $LOG_FILE" both
-#  plutil -replace message -string "Please wait while this computer is set up...<br>Log File available at: $LOG_FILE" "$LOG_JSON"
   START_TIME=$( date "+%s" )
   infoBox
 
@@ -1838,9 +1869,9 @@ case $1 in
 
   # MARK: Disable automatic login
   #  if our TEMP_ADMIN is still configured
-  if [ "$( defaults read /Library/Preferences/com.apple.loginwindow.plist autoLoginUser 2>/dev/null )" = "$TEMP_ADMIN" ]; then
+  if [ "$( plutil -extract autoLoginUser raw -o - /Library/Preferences/com.apple.loginwindow.plist 2>/dev/null )" = "$TEMP_ADMIN" ]; then
    trackNow "Disable automatic login" \
-    secure "defaults delete /Library/Preferences/com.apple.loginwindow.plist autoLoginUser ; rm -f /etc/kcpassword" "Removing $TEMP_ADMIN from automatic login" \
+    secure "plutil -remove autoLoginUser /Library/Preferences/com.apple.loginwindow.plist ; rm -f /etc/kcpassword" "Removing $TEMP_ADMIN from automatic login" \
     result '' 'SF=autostartstop.slash'
    if [ "$( jq 'listitem[.currentitem].status' )" = "success" ]; then
     ((FULLSUCCESS_COUNT++))
@@ -1957,8 +1988,8 @@ case $1 in
  *)
   logIt "TEMP_ADMIN = $TEMP_ADMIN"
   logIt "whoLogged = $( whoLogged )"
-  runIt "defaults read /Library/Preferences/com.apple.loginwindow.plist autoLoginUser 2>/dev/null"
-  if [ "$( defaults read /Library/Preferences/com.apple.loginwindow.plist autoLoginUser 2>/dev/null )" = "$TEMP_ADMIN" ]; then
+  runIt "plutil -extract autoLoginUser raw -o - /Library/Preferences/com.apple.loginwindow.plist 2>/dev/null"
+  if [ "$( plutil -extract autoLoginUser raw -o - /Library/Preferences/com.apple.loginwindow.plist 2>/dev/null )" = "$TEMP_ADMIN" ]; then
    runIt "'$C_ENROLMENT' process >> /dev/null 2>&1"
   else
    runIt "'$C_ENROLMENT' cleanUp >> /dev/null 2>&1"
