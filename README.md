@@ -3,6 +3,11 @@ The next version of enrollmentComplete.
 
 ## completeEnrolment script
 The main script.
+This script relies on the following tools for completing it's tasks, and will install them where necessary:
+- [swiftDialog](https://github.com/swiftDialog/swiftDialog) for displaying dialogs.
+- [mkuser](https://github.com/freegeek-pdx/mkuser) for creating admin accounts.
+- [jamf-cli](https://github.com/Jamf-Concepts/jamf-cli) to talking back to Jamf Pro via the API.
+- [Installomator](https://github.com/Installomator/Installomator), assuming it is provided with a means to, this allows managing the version, i.e. the customised version provided in this repository, the original, or a personally customised version.
 
 ## json files
 These are to help with configuring the config profiles in Jamf Pro.
