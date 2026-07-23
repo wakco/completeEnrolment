@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="3.0b5"
+VERSION="3.0b6"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -64,7 +64,7 @@ whoLogged() {
  if [ "$( who | grep console | wc -l )" -gt 1 ]; then
   echo "$( who | grep -v mbsetupuser | grep -m1 console | cut -d " " -f 1 )"
  else
-   echo "$( who | grep -m1 console | cut -d " " -f 1 )"
+  echo "$( who | grep -m1 console | cut -d " " -f 1 )"
  fi
 }
 
@@ -159,14 +159,6 @@ defaultRead() {
   fi
  done
  echo "$defaultResult"
-}
-
-defaultReadBool() {
- if [ "$( defaultRead $1 ${2:-false} )" = "1" ]; then
-  echo "true"
- else
-  echo "false"
- fi
 }
 
 listRead() {
@@ -593,7 +585,7 @@ trackIt() {
    track update statustext "Paused"
   ;;
   *)
-   if $( defaultReadBool testBefore true ); then
+   if $( defaultRead testBefore true ); then
     testIt 1 $3 $4 $5
     if [ $? -eq 0 ]; then
 #     track string icon "$DIALOG_ICON" both
@@ -628,7 +620,7 @@ trackIt() {
    if [ "$GITHUBAPI" != "" ]; then
     MANAGED_OPTIONS+=" $GITHUBAPI"
    fi
-   if $( defaultReadBool forceInstall true ); then
+   if $( defaultRead forceInstall true ); then
     MANAGED_OPTIONS+=" INSTALL=force"
    fi
    runIt "$C_INSTALL $2 $MANAGED_OPTIONS"
@@ -911,7 +903,7 @@ case $1 in
   track string position "bottom"
   track string height "90%"
   track string width "90%"
-  if $( defaultReadBool appearance true ); then
+  if $( defaultRead appearance true ); then
    track string appearance dark
   else
    track string appearance light
@@ -1290,7 +1282,7 @@ This computer will restart shortly.' $LOGIN_WINDOW_PLIST" '' 1
     runIt "'$C_ENROLMENT' process >> /dev/null 2>&1"
    ;;
   esac
-  if $( defaultReadBool emailJamfLog true ); then
+  if $( defaultRead emailJamfLog true ); then
    # cannot use errorIt to exit here, since 1. this was request, as such, not actually an error, and
    #  2. because errorIt will also cleanUp, which is definitely not wanted at this stage.
    logIt "Exiting with an error signal as requested in the configuration."
@@ -1359,7 +1351,7 @@ This computer will restart shortly.' $LOGIN_WINDOW_PLIST" '' 1
   #  if we just started up (i.e. if whoLogged = TEMP_ADMIN)
   if [ "$( whoLogged )" = "$TEMP_ADMIN" ]; then
    track update status success
-   if ! $( defaultReadBool finderKeep true ); then
+   if ! $( defaultRead finderKeep true ); then
     launchctl bootout gui/$( id -u $( whoLogged ) )/com.apple.Finder
    fi
    sleep 2
@@ -1396,7 +1388,7 @@ This computer will restart shortly.' $LOGIN_WINDOW_PLIST" '' 1
   if [ "$GITHUBAPI" != "" ]; then
    MANAGED_OPTIONS+=" $GITHUBAPI"
   fi
-  if $( defaultReadBool forceInstall true ); then
+  if $( defaultRead forceInstall true ); then
    MANAGED_OPTIONS+=" INSTALL=force"
   fi
   trackNow "Installing jamf-cli" \
@@ -1956,7 +1948,7 @@ This computer will restart shortly.' $LOGIN_WINDOW_PLIST" '' 1
    ;|
    ^2)
     logIt "Restarting the Finder"
-    if ! $( defaultReadBool finderKeep true ); then
+    if ! $( defaultRead finderKeep true ); then
      whoId=$( id -u $( whoLogged ) )
      launchctl asuser $whoId launchctl bootstrap gui/$whoId /System/Library/LaunchAgents/com.apple.Finder.plist
      sleep 0.1
@@ -1969,7 +1961,7 @@ This computer will restart shortly.' $LOGIN_WINDOW_PLIST" '' 1
  # MARK: Clean up
  cleanUp)
   # A clean up routine
-  if ${$( defaultReadBool tempKeep true ):-false}; then
+  if ${$( defaultRead tempKeep true ):-false}; then
    logIt "Keeping $TEMP_ADMIN as requested."
   else
    TEMP_ADMIN_HOME="$( dscl . read "/Users/$TEMP_ADMIN" NFSHomeDirectory | awk -F ': ' '{ print $NF }' )"
