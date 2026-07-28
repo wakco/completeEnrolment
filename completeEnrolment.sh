@@ -1392,8 +1392,8 @@ This computer will restart shortly.' $LOGIN_WINDOW_PLIST" '' 1
    MANAGED_OPTIONS+=" INSTALL=force"
   fi
   trackNow "Installing jamf-cli" \
-   secure "'$C_INSTALL' valuesfromarguments name=\"jamf-cli\" type=pkg downloadURL='\$( downloadURLFromGit \"Jamf-Concepts\" \"jamf-cli\" )' appNewVersion='\$( versionFromGit \"Jamf-Concept\" \"jamf-cli\" )' expectedTeamID=\"483DWKW443\" appName=\"jamf-cli\" \"appCustomVersion() { $C_JCLI --version | head -n1 | awk '{ print \$2 }' }\" $MANAGED_OPTIONS" "Installomator Label - jamf-cli" \
-   file "$C_JCLI" 'SF=apple.terminal'
+   install jamfcli \
+   teamid "$C_JCLI" '483DWKW443' 'SF=apple.terminal'
   unset MANAGED_OPTIONS
   ((REMAINING_TASKS--))
 
