@@ -174,7 +174,7 @@ settingsPlist() {
    if [ ! -e "$SETTINGS_PLIST" ]; then
     runIt "plutil -create xml1 '$SETTINGS_PLIST'" 1
    fi
-   runIt "plutil -replace '$2' $3 '$4' $SETTINGS_PLIST'" 1
+   runIt "plutil -replace '$2' $3 '$4' '$SETTINGS_PLIST'" 1
   ;;
  esac
 }
