@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="3.0b6"
+VERSION="3.0b7"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -162,19 +162,19 @@ defaultRead() {
 }
 
 listRead() {
- plutil -extract "$1" raw -o - "$INSTALLS_JSON" 2>/dev/null
+ runIt "plutil -extract '$1' raw -o - '$INSTALLS_JSON'" 1
 }
 
 settingsPlist() {
  case $1 in
   read)
-   eval "plutil -extract '$2' raw -o - '$SETTINGS_PLIST'" 2>/dev/null
+   runIt "plutil -extract '$2' raw -o - '$SETTINGS_PLIST'" 1
   ;;
   write)
    if [ ! -e "$SETTINGS_PLIST" ]; then
-    eval "plutil -create xml1 '$SETTINGS_PLIST'" 2>/dev/null
+    runIt "plutil -create xml1 '$SETTINGS_PLIST'" 1
    fi
-   eval "plutil -replace '$2' '$3' '$4' $SETTINGS_PLIST'" 2>/dev/null
+   runIt "plutil -replace '$2' $3 '$4' $SETTINGS_PLIST'" 1
   ;;
  esac
 }
