@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="3.0b7"
+VERSION="3.0b8"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -16,19 +16,7 @@ C_MKUSER="/usr/local/bin/mkuser"
 C_ENROLMENT="/usr/local/bin/completeEnrolment"
 C_JQ="/usr/bin/jq"
 C_JCLI="/usr/local/bin/jamf-cli"
-
-checkDialog() {
- local dialogv2="/Library/Application Support/Dialog/Dialog.app/Contents/MacOS/Dialog"
- local dialogv3="/Library/Application Support/Dialog/Dialog.app/Contents/MacOS/dialogcli"
- if [ -e "$dialogv3" ]; then
-  # preferred
-  C_DIALOG="$dialogv3"
- else
-  # if we have to
-  C_DIALOG="$dialogv2"
- fi
-}
-checkDialog
+C_DIALOG="/Library/Application Support/Dialog/Dialog.app/Contents/MacOS/dialogcli"
 
 # MARK: Variables
 
@@ -978,8 +966,6 @@ case $1 in
    install dialog \
    teamid "$C_DIALOG" 'PWA5E9TQ59' 'SF=macwindow.badge.plus'
   ((REMAINING_TASKS--))
-  # set C_DIALOG to match the installed version of dialog
-  checkDialog
 
   # Executed by Jamf Pro
   # Load config profile settings and save them for later use in a more secure location, do the same
