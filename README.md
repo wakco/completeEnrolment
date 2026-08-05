@@ -1,5 +1,5 @@
 # completeEnrolment
-The next version of enrollmentComplete.
+This is my version of an initial setup script, design for use with Jamf Pro.
 
 ## completeEnrolment script
 The main script.
@@ -10,7 +10,7 @@ This script relies on the following tools for completing it's tasks, and will in
 - [Installomator](https://github.com/Installomator/Installomator), assuming it is provided with a means to, this allows managing the version, i.e. the customised version provided in this repository, the original, or a personally customised version.
 
 ## json files
-These are to help with configuring the config profiles in Jamf Pro.
+These Jamf Pro schema's are to help with configuring the config profiles.
 
 ### completeEnrolment.json
 The main settings (and optional task list, or first task list)
