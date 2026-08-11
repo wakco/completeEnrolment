@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="3.0b8"
+VERSION="3.0"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -245,7 +245,7 @@ infoBox() {
  helpAdd "The **Show Log/Tasks...** button will switch between log / task views,"
  helpAdd "and reset the screen in the process." '<br>'
  helpAdd "---" '<br>'
- bothAdd "**macOS $( sw_vers -productversion )** on  <br>$( scutil --get ComputerName )  <br>(S/N: $SERIALNUMBER)" '<br>'
+ bothAdd "**macOS $( sw_vers -productversion )** ($( sw_vers -buildversion )) on  <br>$( scutil --get ComputerName )  <br>(S/N: $SERIALNUMBER)" '<br>'
  helpAdd "| Software | Version |"
  helpAdd "|-|-|"
  helpAdd "| $SCRIPTNAME | $VERSION |"
