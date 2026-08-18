@@ -3,7 +3,7 @@ This is my version of an initial setup script, design for use with Jamf Pro.
 
 ## completeEnrolment script
 The main script.
-This script relies on the following tools for completing it's tasks, and will install them where necessary:
+This script relies on the following tools for completing it's tasks, will install where necessary, and leaves them installed, for potential future use (without any login/api credentials):
 - [swiftDialog](https://github.com/swiftDialog/swiftDialog) for displaying dialogs.
 - [mkuser](https://github.com/freegeek-pdx/mkuser) for creating admin accounts.
 - [jamf-cli](https://github.com/Jamf-Concepts/jamf-cli) for talking back to Jamf Pro via the API.
