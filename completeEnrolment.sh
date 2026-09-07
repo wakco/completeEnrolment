@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="3.0"
+VERSION="3.01"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Time to reduce some of the logging
@@ -874,8 +874,8 @@ case $1 in
   settingsPlist write email -string "$9"
   case "$11" in
    apac|eu|us)
-    settingsPlist write apiTenant -string "$10"
-    settingsPlist write apiGw -string "https://$11.apigw.jamf.com"
+    settingsPlist write apiEnvironment -string "$10"
+    settingsPlist write apiGw -string "https://$11.api.jamfcloud.com"
    ;;
   esac
 
@@ -1385,13 +1385,13 @@ This computer will restart shortly.' $LOGIN_WINDOW_PLIST" '' 1
 
   export JAMF_CLIENT_ID="$( readSaved apiId )"
   export JAMF_CLIENT_SECRET="$( readSaved apiSecret )"
-  if [ "$( readSaved apiTenant )" = "" ] || [ "$( settingsPlist read apiGw )" = "" ]; then
+  if [ "$( readSaved apiEnvironment )" = "" ] || [ "$( settingsPlist read apiGw )" = "" ]; then
    export JAMF_URL="$JAMF_CONF_URL"
   else
    export JAMF_URL="$( settingsPlist read apiGw )"
-   export JAMF_TENANT_ID="$( readSaved apiTenant )"
+   export JAMF_ENVIRONMENT_ID="$( readSaved apiEnvironment )"
   fi
-  logIt "Exported fields for jamf-cli:\nJAMF_CLIENT_ID = $JAMF_CLIENT_ID\nJAMF_CLIENT_SECRET = $JAMF_CLIENT_SECRET\nJAMF_URL = $JAMF_URL\nJAMF_TENANT_ID = $JAMF_TENANT_ID\n" 1
+  logIt "Exported fields for jamf-cli:\nJAMF_CLIENT_ID = $JAMF_CLIENT_ID\nJAMF_CLIENT_SECRET = $JAMF_CLIENT_SECRET\nJAMF_URL = $JAMF_URL\JAMF_ENVIRONMENT_ID = $JAMF_ENVIRONMENT_ID\n" 1
 
   logIt "Loading Jamf accounts..." 1
   JAMF_ACCOUNTS="$( runIt "'$C_JCLI' pro local-admin-passwords accounts '$( defaultRead managementID true )' --no-color --no-input --quiet" '' 1 )"
