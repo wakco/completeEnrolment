@@ -1363,12 +1363,6 @@ This computer will restart shortly.' $LOGIN_WINDOW_PLIST" '' 1
   ((REMAINING_TASKS--))
   sleep 2
 
-  # MARK: Add/update JAMF ADMIN
-  # finishing setting up admin accounts
-  # Add JSS ADMIN
-  # This will load the $JAMF_ADMIN and $JAMF_PASS login details, and the $LAPS_ADMIN account name
-  # Now using jamf-cli, enabling support for Platform API Gateway instead going directly using the less-secure curl method
-
   # MARK: Install jamf-cli
   MANAGED_OPTIONS="NOTIFY=silent"
   if [ "$GITHUBAPI" != "" ]; then
@@ -1382,6 +1376,12 @@ This computer will restart shortly.' $LOGIN_WINDOW_PLIST" '' 1
    teamid "$C_JCLI" '483DWKW443' 'SF=apple.terminal'
   unset MANAGED_OPTIONS
   ((REMAINING_TASKS--))
+
+  # MARK: Add/update JAMF ADMIN
+  # finishing setting up admin accounts
+  # Add JSS ADMIN
+  # This will load the $JAMF_ADMIN and $JAMF_PASS login details, and the $LAPS_ADMIN account name
+  # Now using jamf-cli, enabling support for Platform API Gateway instead going directly using the less-secure curl method
 
   export JAMF_CLIENT_ID="$( readSaved apiId )"
   export JAMF_CLIENT_SECRET="$( readSaved apiSecret )"
