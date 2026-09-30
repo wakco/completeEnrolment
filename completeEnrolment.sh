@@ -1,10 +1,10 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="3.02"
+VERSION="3.03"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
-# Time to reduce some of the logging
+# Lets reduce the logging
 DEBUG=0
 
 # MARK: Commands
@@ -348,7 +348,7 @@ track() {
    TRACKER_ITEM=${$( jq 'currentitem' ):-0}
   ;|
   update)
-   logIt "Updating $2 of task #$TRACKER_ITEM \"$( jq 'listitem[.currentitem].title' )\" to: $THE_STRING" 1
+   logIt "Updating $2 of task #$TRACKER_ITEM \"$( jq "listitem[$TRACKER_ITEM].title" )\" to: $THE_STRING" 1
    plutil -replace "listitem.$TRACKER_ITEM.$2" -string "$THE_STRING" "$TRACKER_JSON"
    if [ "$2" = "progress" ]; then
     plutil -replace "listitem.$TRACKER_ITEM.status" -string "progress" "$TRACKER_JSON"
@@ -358,17 +358,17 @@ track() {
    fi
   ;;
   progress|status)
-   logIt "Updating statustext of task #$TRACKER_ITEM \"$( jq 'listitem[.currentitem].title' )\" to: $THE_STRING" 1
+   logIt "Updating statustext of task #$TRACKER_ITEM \"$( jq "listitem[$TRACKER_ITEM].title" )\" to: $THE_STRING" 1
    plutil -replace "listitem.$TRACKER_ITEM.statustext" -string "$THE_STRING" "$TRACKER_JSON"
   ;|
   progress)
-   logIt "Updating progress of task #$TRACKER_ITEM \"$( jq 'listitem[.currentitem].title' )\" to: $2" 1
+   logIt "Updating progress of task #$TRACKER_ITEM \"$( jq "listitem[$TRACKER_ITEM].title" )\" to: $2" 1
    plutil -replace "listitem.$TRACKER_ITEM.status" -string "progress" "$TRACKER_JSON"
    plutil -replace "listitem.$TRACKER_ITEM.progress" -string "$2" "$TRACKER_JSON"
    dialogSend "listitem: index: $TRACKER_ITEM, status: progress, progress: $2, statustext: $THE_STRING"
   ;;
   status)
-   logIt "Updating status of task #$TRACKER_ITEM \"$( jq 'listitem[.currentitem].title' )\" to: $2" 1
+   logIt "Updating status of task #$TRACKER_ITEM \"$( jq "listitem[$TRACKER_ITEM].title" )\" to: $2" 1
    plutil -replace "listitem.$TRACKER_ITEM.status" -string "$2" "$TRACKER_JSON"
    dialogSend "listitem: index: $TRACKER_ITEM, status: $2, statustext: $THE_STRING"
   ;;
