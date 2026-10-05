@@ -35,7 +35,7 @@ This is a variation of Installomator based on a version of a 10.9 beta, that doe
 
 ## Jamf Policy/Script $4-11 Variables
 
-- $4 - Github API Key for Installomator (encoded with base64)
+- $4 - Github API Key for the custom version of Installomator hosted here (encoded with base64)
 - $5 - Temporary (default) password (encoded with base64)
 - $6 - LAPS first password (if empty, will use the temporary password, encoded with base64)
 - $7 - Jamf API ID (or Jamf Platform API Gateway ID, encoded with base64)
