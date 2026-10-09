@@ -1,7 +1,7 @@
 #!/bin/zsh -f
 
 # Version
-VERSION="3.03"
+VERSION="3.04"
 SCRIPTNAME="$( basename "$0" )"
 SERIALNUMBER="$( ioreg -l | grep IOPlatformSerialNumber | cut -d '"' -f 4 )"
 # Lets reduce the logging
@@ -40,6 +40,7 @@ mkdir -p "$CACHE"
 CLEANUP_FILES+=( "$CACHE" )
 JAMF_CONF_URL="$( plutil -extract jss_url raw -o - /Library/Preferences/com.jamfsoftware.jamf.plist )"
 JAMF_SERVER="$( echo "$JAMF_CONF_URL" | awk -F '(/|:)' '{ print $4 }' )"
+KCPASS="/etc/kcpassword"
 
 # MARK: Whose logged in
 
@@ -1849,7 +1850,7 @@ This computer will restart shortly.' $LOGIN_WINDOW_PLIST" '' 1
   #  if our TEMP_ADMIN is still configured
   if [ "$( plutil -extract autoLoginUser raw -o - /Library/Preferences/com.apple.loginwindow.plist 2>/dev/null )" = "$TEMP_ADMIN" ]; then
    trackNow "Disable automatic login" \
-    secure "plutil -remove autoLoginUser /Library/Preferences/com.apple.loginwindow.plist ; rm -f /etc/kcpassword" "Removing $TEMP_ADMIN from automatic login" \
+    secure "plutil -remove autoLoginUser /Library/Preferences/com.apple.loginwindow.plist ; rm -f \"$KCPASS\"" "Removing $TEMP_ADMIN from automatic login" \
     result '' 'SF=autostartstop.slash'
    if [ "$( jq 'listitem[.currentitem].status' )" = "success" ]; then
     ((FULLSUCCESS_COUNT++))
@@ -1967,9 +1968,10 @@ This computer will restart shortly.' $LOGIN_WINDOW_PLIST" '' 1
   logIt "TEMP_ADMIN = $TEMP_ADMIN"
   logIt "whoLogged = $( whoLogged )"
   runIt "plutil -extract autoLoginUser raw -o - /Library/Preferences/com.apple.loginwindow.plist 2>/dev/null"
-  if [ "$( plutil -extract autoLoginUser raw -o - /Library/Preferences/com.apple.loginwindow.plist 2>/dev/null )" = "$TEMP_ADMIN" ]; then
+  if [ -e "$KCPASS" ] && [ "$( plutil -extract autoLoginUser raw -o - /Library/Preferences/com.apple.loginwindow.plist 2>/dev/null )" = "$TEMP_ADMIN" ]; then
    runIt "'$C_ENROLMENT' process >> /dev/null 2>&1"
   else
+   rm -rf "$KCPASS"
    runIt "'$C_ENROLMENT' cleanUp >> /dev/null 2>&1"
   fi
  ;;
